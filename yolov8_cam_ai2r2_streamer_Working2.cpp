@@ -1,0 +1,368 @@
+#include <fstream>
+#include <string>
+#include <vector>
+#include <chrono>
+#include <algorithm> // For std::sort
+#include <memory>    // For std::unique_ptr, std::shared_ptr
+
+#include <hailo/hailort.hpp>
+#include <hailo/hailort_common.hpp>
+#include <hailo/vdevice.hpp>
+#include <hailo/infer_model.hpp>
+#include <opencv2/opencv.hpp>
+
+// Headers for V4L2
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+#include <linux/videodev2.h>
+
+#include "output_tensor.h" // Assuming this header is in the same directory or include path
+// #include "debug.h" // Assuming this header is in the same directory or include path (if still needed)
+
+// Class names for COCO dataset (YOLOv8)
+std::vector<std::string> classNames = {
+    "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat",
+    "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat",
+    "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack",
+    "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball",
+    "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket",
+    "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple",
+    "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair",
+    "couch", "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse",
+    "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink",
+    "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier",
+    "toothbrush"
+};
+
+// Default paths and parameters
+const std::string defaultHefFile = "yolov8s.hef";
+const std::string defaultCameraPath = "/dev/video0";
+const std::string defaultVirtualDevicePath = "/dev/video10"; // Default virtual output device
+float confidenceThreshold = 0.5f;
+float nmsIoUThreshold = 0.45f;
+
+// Helper function to print V4L2 errors
+void errno_exit(const char *s) {
+    fprintf(stderr, "%s error %d, %s\n", s, errno, strerror(errno));
+    exit(EXIT_FAILURE);
+}
+
+// Helper function for ioctl calls
+static int xioctl(int fh, unsigned long request, void *arg) {
+    int r;
+    do {
+        r = ioctl(fh, request, arg);
+    } while (-1 == r && EINTR == errno);
+    return r;
+}
+
+
+int run(const std::string& cam_path, const std::string& hef_path, const std::string& virtual_device_path) {
+    using namespace hailort;
+    using namespace std::literals::chrono_literals;
+
+    // --- HailoRT Initialization ---
+    Expected<std::unique_ptr<VDevice>> vdevice_exp = VDevice::create();
+    if (!vdevice_exp) {
+        fprintf(stderr, "Failed to create vdevice: %s\n", vdevice_exp.status());
+        return vdevice_exp.status();
+    }
+    std::unique_ptr<hailort::VDevice> vdevice = vdevice_exp.release();
+
+    Expected<std::shared_ptr<InferModel>> infer_model_exp = vdevice->create_infer_model(hef_path);
+    if (!infer_model_exp) {
+        fprintf(stderr, "Failed to create infer model from HEF %s: %s\n", hef_path.c_str(), infer_model_exp.status());
+        return infer_model_exp.status();
+    }
+    std::shared_ptr<hailort::InferModel> infer_model = infer_model_exp.release();
+    infer_model->set_hw_latency_measurement_flags(HAILO_LATENCY_MEASURE);
+    infer_model->output()->set_nms_score_threshold(confidenceThreshold);
+    infer_model->output()->set_nms_iou_threshold(nmsIoUThreshold);
+
+    int nnWidth = infer_model->inputs()[0].shape().width;
+    int nnHeight = infer_model->inputs()[0].shape().height;
+    fprintf(stderr, "Network Input Resolution: %dx%d\n", nnWidth, nnHeight);
+
+    Expected<ConfiguredInferModel> configured_infer_model_exp = infer_model->configure();
+    if (!configured_infer_model_exp) {
+        fprintf(stderr, "Failed to configure infer model: %s\n", configured_infer_model_exp.status());
+        return configured_infer_model_exp.status();
+    }
+    std::shared_ptr<hailort::ConfiguredInferModel> configured_infer_model =
+        std::make_shared<ConfiguredInferModel>(configured_infer_model_exp.release());
+
+    Expected<ConfiguredInferModel::Bindings> bindings_exp = configured_infer_model->create_bindings();
+    if (!bindings_exp) {
+        fprintf(stderr, "Failed to create bindings: %s\n", bindings_exp.status());
+        return bindings_exp.status();
+    }
+    hailort::ConfiguredInferModel::Bindings bindings = std::move(bindings_exp.release());
+
+    // --- OpenCV Camera Initialization ---
+    cv::VideoCapture cap;
+    if (!cap.open(cam_path, cv::CAP_V4L2)) {
+        fprintf(stderr, "Failed to open camera %s with V4L2 backend\n", cam_path.c_str());
+        return 1;
+    }
+    cap.set(cv::CAP_PROP_FRAME_WIDTH, nnWidth);
+    cap.set(cv::CAP_PROP_FRAME_HEIGHT, nnHeight);
+    cap.set(cv::CAP_PROP_FPS, 30); // Request 30 FPS
+    cap.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
+
+    double actual_width = cap.get(cv::CAP_PROP_FRAME_WIDTH);
+    double actual_height = cap.get(cv::CAP_PROP_FRAME_HEIGHT);
+    double actual_fps = cap.get(cv::CAP_PROP_FPS);
+    fprintf(stderr, "Requested camera resolution: %dx%d\n", nnWidth, nnHeight);
+    fprintf(stderr, "Actual camera resolution: %.0fx%.0f @ %.1f FPS\n", actual_width, actual_height, actual_fps);
+
+    if (static_cast<int>(actual_width) != nnWidth || static_cast<int>(actual_height) != nnHeight) {
+        fprintf(stderr, "Warning: Camera resolution (%dx%d) does not match network input (%dx%d). OpenCV will resize.\n",
+                static_cast<int>(actual_width), static_cast<int>(actual_height), nnWidth, nnHeight);
+    }
+
+    const std::string& input_name = infer_model->get_input_names()[0];
+    size_t input_frame_size = infer_model->input(input_name)->get_frame_size();
+    fprintf(stderr, "Input tensor name: %s, frame size: %zu bytes\n", input_name.c_str(), input_frame_size);
+
+    // --- V4L2 Output Device Initialization ---
+    int video_fd = -1;
+    video_fd = open(virtual_device_path.c_str(), O_WRONLY | O_NONBLOCK); // O_NONBLOCK can be useful
+    if (video_fd < 0) {
+        fprintf(stderr, "Failed to open virtual video device %s: %s\n", virtual_device_path.c_str(), strerror(errno));
+        cap.release();
+        return 1;
+    }
+    fprintf(stderr, "Successfully opened virtual video device: %s (fd: %d)\n", virtual_device_path.c_str(), video_fd);
+
+    struct v4l2_format fmt = {0};
+    fmt.type = V4L2_BUF_TYPE_VIDEO_OUTPUT; // We are outputting frames to this device
+    fmt.fmt.pix.width = nnWidth;
+    fmt.fmt.pix.height = nnHeight;
+    fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUV420; // YUV420 planar (I420)
+    fmt.fmt.pix.field = V4L2_FIELD_NONE; // Progressive scan
+    // For YUV420, sizeimage = width * height * 3 / 2
+    // bytesperline for Y plane is width. For U and V planes, it's width / 2.
+    // Some drivers might calculate this automatically if set to 0, or expect it.
+    fmt.fmt.pix.bytesperline = nnWidth; // Stride of the Y plane
+    fmt.fmt.pix.sizeimage = (nnWidth * nnHeight * 3) / 2;
+
+    if (xioctl(video_fd, VIDIOC_S_FMT, &fmt) < 0) {
+        fprintf(stderr, "Failed to set video format on %s: %s\n", virtual_device_path.c_str(), strerror(errno));
+        close(video_fd);
+        cap.release();
+        return 1;
+    }
+    fprintf(stderr, "Successfully set format for %s: %dx%d, pixformat YUV420\n",
+            virtual_device_path.c_str(), fmt.fmt.pix.width, fmt.fmt.pix.height);
+
+
+    fprintf(stderr, "Press Enter to start camera capture and inference...\n");
+    fgetc(stdin); // Wait for user input to start
+
+    cv::Mat frame, resized_frame, rgb_frame, yuv_frame;
+    size_t yuv_frame_size = (nnWidth * nnHeight * 3) / 2; // Expected YUV420 frame size
+
+    while (true) {
+        cap >> frame;
+        if (frame.empty()) {
+            fprintf(stderr, "Failed to capture frame from camera or end of video stream.\n");
+            break;
+        }
+
+        // Resize if necessary (OpenCV camera might not give exact dimensions)
+        if (frame.cols != nnWidth || frame.rows != nnHeight) {
+            cv::resize(frame, resized_frame, cv::Size(nnWidth, nnHeight));
+        } else {
+            resized_frame = frame;
+        }
+
+        // Convert BGR (OpenCV default) to RGB for the model
+        cv::cvtColor(resized_frame, rgb_frame, cv::COLOR_BGR2RGB);
+
+        // --- Hailo Inference ---
+        auto status = bindings.input(input_name)->set_buffer(MemoryView(rgb_frame.data, input_frame_size));
+        if (status != HAILO_SUCCESS) {
+            fprintf(stderr, "Failed to set input memory buffer: %s\n", status);
+            break; // Exit loop on error
+        }
+
+        std::vector<OutTensor> output_tensors;
+        for (auto const& output_name : infer_model->get_output_names()) {
+            size_t output_size = infer_model->output(output_name)->get_frame_size();
+            uint8_t* output_buffer = (uint8_t*)malloc(output_size);
+            if (!output_buffer) {
+                fprintf(stderr, "Could not allocate output buffer\n");
+                return HAILO_OUT_OF_HOST_MEMORY;
+            }
+
+            status = bindings.output(output_name)->set_buffer(MemoryView(output_buffer, output_size));
+            if (status != HAILO_SUCCESS) {
+                free(output_buffer);
+                fprintf(stderr, "Failed to set output buffer: %d\n", (int)status);
+                return status;
+            }
+
+            const auto quant = infer_model->output(output_name)->get_quant_infos();
+            const auto shape = infer_model->output(output_name)->shape();
+            const auto format = infer_model->output(output_name)->format();
+            output_tensors.emplace_back(output_buffer, output_name, quant[0], shape, format);
+        }
+        
+        // Run inference
+        status = configured_infer_model->wait_for_async_ready(1s);
+        if (status != HAILO_SUCCESS) {
+            std::cout << "Error: Failed to wait for async ready - " << status << std::endl;
+            for (auto& tensor : output_tensors) free(tensor.data); // Free buffers before breaking
+            break;
+        }
+
+        Expected<AsyncInferJob> job_exp = configured_infer_model->run_async(bindings, [](const AsyncInferCompletionInfo&){});
+        if (!job_exp) {
+            std::cout << "Error: Failed to start async job: " << job_exp.status() << std::endl;
+            for (auto& tensor : output_tensors) free(tensor.data);
+            break;
+        }
+        hailort::AsyncInferJob job = job_exp.release();
+
+        // Sort output tensors if necessary (e.g. for specific post-processing order)
+        // std::sort(output_tensors.begin(), output_tensors.end(), OutTensor::SortFunction); // If SortFunction is defined
+
+        status = job.wait(1s); // Wait for inference to complete
+        if (status != HAILO_SUCCESS) {
+            std::cout << "Error: Failed to wait for job completion: " << status << std::endl;
+            for (auto& tensor : output_tensors) free(tensor.data);
+            break;
+        }
+
+        // --- Post-processing and Drawing ---
+        // Convert RGB frame back to BGR for OpenCV drawing functions
+        cv::Mat display_frame;
+        cv::cvtColor(rgb_frame, display_frame, cv::COLOR_RGB2BGR);
+
+        bool nmsOnHailo = infer_model->outputs().size() == 1 && infer_model->outputs()[0].is_nms();
+        if (nmsOnHailo) {
+            OutTensor* out = &output_tensors[0]; // Assuming NMS output is the first one
+            const float* raw = (const float*)out->data;
+            size_t numClasses = (size_t)out->shape.height;
+            size_t classIdx = 0;
+            size_t idx = 0;
+            
+            while (classIdx < numClasses) {
+                
+                size_t numBoxes = (size_t)raw[idx++];
+                    for (size_t i = 0; i < numBoxes; i++) {
+                    float ymin = raw[idx];
+                    float xmin = raw[idx + 1];
+                    float ymax = raw[idx + 2];
+                    float xmax = raw[idx + 3];
+                    float confidence = raw[idx + 4];
+                    
+                    if (confidence >= confidenceThreshold) {
+                        // Convert normalized coordinates to pixel coordinates
+                        int x1 = static_cast<int>(xmin * display_frame.cols);
+                        int y1 = static_cast<int>(ymin * display_frame.rows);
+                        int x2 = static_cast<int>(xmax * display_frame.cols);
+                        int y2 = static_cast<int>(ymax * display_frame.rows);
+
+                        // Draw bounding box on display_frame
+                        cv::rectangle(display_frame, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(0, 255, 0), 2); // UNCOMMENTED AND NOW ON DISPLAY_FRAME
+                        
+                        // Put class label and confidence on display_frame
+                        std::string label = cv::format("%s: %.2f", classNames[classIdx].c_str(), confidence);
+                        int baseline = 0;
+                        cv::Size text_size = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseline);
+                        cv::rectangle(display_frame, cv::Point(x1, y1 - text_size.height - 5), 
+                                     cv::Point(x1 + text_size.width, y1), cv::Scalar(0, 255, 0), cv::FILLED);
+                        cv::putText(display_frame, label, cv::Point(x1, y1 - 5), 
+                                   cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0), 1);
+                    }
+                    idx += 5;
+                }
+                classIdx++;
+            }
+        } else {
+            std::cout << "Error: NMS on CPU is not implemented in this example. Output may be raw tensor data." << std::endl;
+        }
+
+        // --- Convert to YUV420p for V4L2 output ---
+        // display_frame is BGR. Convert to YUV_I420 (YUV420 planar)
+        cv::cvtColor(display_frame, yuv_frame, cv::COLOR_BGR2YUV_I420);
+
+        // --- Write YUV420p data to virtual device ---
+        if (yuv_frame.isContinuous() && yuv_frame.total() * yuv_frame.elemSize() == yuv_frame_size) {
+            ssize_t bytes_written = write(video_fd, yuv_frame.data, yuv_frame_size);
+            if (bytes_written < 0) {
+                std::cout << "Error: Failed to write frame to " << virtual_device_path << ": " << strerror(errno) << std::endl;
+                // Potentially break or attempt to recover. For simplicity, we break.
+                // EAGAIN or EWOULDBLOCK might occur if O_NONBLOCK is used and buffer is full.
+                if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                    std::cout << "Warning: Virtual device " << virtual_device_path << " buffer full? Try reading from it." << std::endl;
+                    // continue; // Optionally, skip frame and try next
+                }
+                // For other errors, it's likely more serious
+                // break; // Uncomment to stop on write error
+            } else if (static_cast<size_t>(bytes_written) != yuv_frame_size) {
+                std::cout << "Warning: Incomplete frame write to " << virtual_device_path << " (wrote " << bytes_written << " of " << yuv_frame_size << " bytes)" << std::endl;
+                        
+            }
+        } else {
+            std::cout << "Error: YUV frame is not continuous or has unexpected size. Cannot write to V4L2 device." << std::endl;
+            // This should ideally not happen if nnWidth/nnHeight are consistent and cvtColor works.
+        }
+        
+        // Free output buffers for the next iteration
+        for (auto& tensor : output_tensors) {
+            free(tensor.data);
+        }
+
+        // Optional: Display window (for local debugging, not needed for pure V4L2 streaming)
+        // cv::imshow("Hailo Detection Stream", display_frame);
+        // if (cv::waitKey(1) >= 0) break; // Exit on any key press
+
+    } // End of while(true) loop
+
+    // --- Cleanup ---
+    fprintf(stderr, "Exiting application...\n");
+    if (video_fd >= 0) {
+        close(video_fd);
+        fprintf(stderr, "Closed virtual video device %s\n", virtual_device_path.c_str());
+    }
+    cap.release();
+    // cv::destroyAllWindows(); // If imshow was used
+
+    return 0;
+}
+
+int main(int argc, char** argv) {
+    std::string hef = defaultHefFile;
+    std::string cam_path = defaultCameraPath;
+    std::string virtual_dev_path = defaultVirtualDevicePath;
+
+    if (argc > 1) {
+        cam_path = argv[1];
+    }
+    if (argc > 2) {
+        virtual_dev_path = argv[2];
+    }
+    if (argc > 3) {
+        hef = argv[3];
+    }
+    
+
+    fprintf(stderr, "Using Camera/Video Path: %s\n", cam_path.c_str());
+    fprintf(stderr, "Using HEF file: %s\n", hef.c_str());
+    fprintf(stderr, "Outputting to Virtual Device: %s\n", virtual_dev_path.c_str());
+
+    // Note: setvbuf for stdout is not needed if not piping video through it.
+    // fflush(stdout) is also not needed for stdout.
+
+    int status = run(cam_path, hef, virtual_dev_path);
+
+    if (status == 0) {
+        fprintf(stderr, "Application completed successfully.\n");
+    } else {
+        fprintf(stderr, "Application failed with error code: %d\n", status);
+    }
+    return status;
+}
