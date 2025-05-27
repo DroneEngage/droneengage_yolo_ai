@@ -29,7 +29,7 @@ endif()
 
 SET (__APP__VERSION__ "1.3.3")
 add_definitions( -D__APP__VERSION__="${__APP__VERSION__}")
-project(DE_RPI_GPIO VERSION ${__APP__VERSION__})
+project(DE_YOLO_AI VERSION ${__APP__VERSION__})
 
 
 
@@ -41,6 +41,10 @@ SET(CMAKE_CXX_STANDARD 17)
 SET(CMAKE_CXX_STANDARD_REQUIRED True)
 
 find_package(Threads REQUIRED)
+
+# Find OpenCV package
+find_package(OpenCV 4.5 REQUIRED)
+message(STATUS "OpenCV_INCLUDE_DIRS found: ${OpenCV_INCLUDE_DIRS}")
 
 
 #define default build
@@ -86,38 +90,41 @@ SET(EXECUTABLE_OUTPUT_PATH ${OUTPUT_DIRECTORY})
 
 
 #add_subdirectory(src)
-
 file(GLOB folder_src "./src/*.cpp")
 file(GLOB folder_helpers "./src/helpers/*.cpp")
 file(GLOB folder_common "./src/de_common/*.cpp")
-file(GLOB folder_gpio "./src/gpio/*.cpp")
+file(GLOB folder_ai "./src/yolo_ai/*.cpp")
 
 
 
-set(files ${folder_src} ${folder_common} ${folder_gpio} ${folder_helpers})
+set(files ${folder_src} ${folder_common} ${folder_ai} ${folder_helpers})
 
-include_directories(${PROJECT_SOURCE_DIR}/3rdparty)
+include_directories(${OpenCV_INCLUDE_DIRS}) # Add OpenCV include directories
 
 add_executable( OUTPUT_BINARY ${files})
 
 # Link the required libraries
-if(NOT TEST_MODE_NO_WIRINGPI_LINK)
+if(NOT TEST_MODE_NO_HAILO_LINK)
   target_link_libraries(OUTPUT_BINARY 
-    wiringPi
+    hailort
   )
 else()
-  # Define the preprocessor macro for TEST_MODE_NO_WIRINGPI_LINK
-  target_compile_definitions(OUTPUT_BINARY PRIVATE TEST_MODE_NO_WIRINGPI_LINK)
+  # Define the preprocessor macro for TEST_MODE_NO_HAILO_LINK
+  target_compile_definitions(OUTPUT_BINARY PRIVATE TEST_MODE_NO_HAILO_LINK)
 endif()
+
+
+target_link_libraries(OUTPUT_BINARY ${OpenCV_LIBS})
+target_link_libraries(OUTPUT_BINARY  Threads::Threads)
 
 set_target_properties( OUTPUT_BINARY 
                 PROPERTIES 
-                    OUTPUT_NAME "de_rpi_gpio"
+                    OUTPUT_NAME "de_yolo_ai"
                     SUFFIX ".so"
                 )
 
 
-target_link_libraries(OUTPUT_BINARY  Threads::Threads)
+
 
 target_compile_options(OUTPUT_BINARY
     PRIVATE
@@ -125,7 +132,7 @@ target_compile_options(OUTPUT_BINARY
         -Wno-return-type-c-linkage
 )
 
-configure_file(de_rpi_gpio.config.module.json ${OUTPUT_DIRECTORY}/de_rpi_gpio.config.module.json COPYONLY)
+configure_file(de_yolo_ai.config.module.json ${OUTPUT_DIRECTORY}/de_yolo_ai.config.module.json COPYONLY)
 
 
 message ("${Yellow}=========================================================================${ColourReset}")

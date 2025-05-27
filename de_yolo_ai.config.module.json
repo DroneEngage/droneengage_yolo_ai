@@ -1,0 +1,38 @@
+{   
+    // A name and GUID for this module
+    "module_id"                   : "YOLO_AI_HAILO",
+    
+   
+    "s2s_udp_target_ip": "127.0.0.1",
+    "s2s_udp_target_port": "60000", 
+    "s2s_udp_listening_ip": "127.0.0.1", 
+    "s2s_udp_listening_port": "60053", 
+    "s2s_udp_packet_size": "8192",
+
+    
+    
+    // Specific Module Parameters
+    "source_video_device"         : "/dev/video0",
+    "output_video_device"         : "/dev/video2",
+
+    
+    // AI-MODEL
+    "model_path": "yolov8s.hef",
+    "class_names" : [
+    "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat",
+    "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat",
+    "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack",
+    "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball",
+    "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket",
+    "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple",
+    "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair",
+    "couch", "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse",
+    "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink",
+    "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier",
+    "toothbrush"
+    ],
+
+  // Debugging
+    "display_video"              : false
+
+}

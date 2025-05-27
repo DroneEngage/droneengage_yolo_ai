@@ -1,7 +1,16 @@
-#pragma once
+/***************************************************************************************
+ * 
+ * Author: https://github.com/bmharper
+ * Origin of Code: https://github.com/bmharper/hailo-rpi5-yolov8
+ * 
+ ***************************************************************************************/
+
+ #pragma once
 
 #include <memory>
 #include <string>
+
+#ifndef TEST_MODE_NO_HAILO_LINK
 
 class OutTensor {
 public:
@@ -20,3 +29,6 @@ public:
 		return l.shape.width < r.shape.width;
 	}
 };
+
+
+#endif
