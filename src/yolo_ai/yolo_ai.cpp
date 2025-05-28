@@ -1,4 +1,3 @@
-
 #include <iostream>
 #include <signal.h>
 #include <ctime>

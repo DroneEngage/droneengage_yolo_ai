@@ -95,29 +95,37 @@ file(GLOB folder_helpers "./src/helpers/*.cpp")
 file(GLOB folder_common "./src/de_common/*.cpp")
 file(GLOB folder_ai "./src/yolo_ai/*.cpp")
 
+# Define an option for user control over DETAILED_DEBUG
+option(DDEBUG "Detailed Debug" OFF) # Default is OFF
+option(TEST_MODE_NO_HAILO_LINK "Do not link to Hailo LIB" OFF) # Default is OFF
 
 
 set(files ${folder_src} ${folder_common} ${folder_ai} ${folder_helpers})
 
 include_directories(${OpenCV_INCLUDE_DIRS}) # Add OpenCV include directories
 
-add_executable( OUTPUT_BINARY ${files})
+add_executable( de_yolo_ai ${files})
 
+
+# Conditionally define DDEBUG based on the DDEBUG option
+target_compile_definitions(de_yolo_ai PRIVATE
+    $<$<BOOL:${DDEBUG}>:DDEBUG>
+)
 # Link the required libraries
 if(NOT TEST_MODE_NO_HAILO_LINK)
-  target_link_libraries(OUTPUT_BINARY 
+  target_link_libraries(de_yolo_ai 
     hailort
   )
 else()
   # Define the preprocessor macro for TEST_MODE_NO_HAILO_LINK
-  target_compile_definitions(OUTPUT_BINARY PRIVATE TEST_MODE_NO_HAILO_LINK)
+  target_compile_definitions(de_yolo_ai PRIVATE TEST_MODE_NO_HAILO_LINK)
 endif()
 
 
-target_link_libraries(OUTPUT_BINARY ${OpenCV_LIBS})
-target_link_libraries(OUTPUT_BINARY  Threads::Threads)
+target_link_libraries(de_yolo_ai ${OpenCV_LIBS})
+target_link_libraries(de_yolo_ai  Threads::Threads)
 
-set_target_properties( OUTPUT_BINARY 
+set_target_properties( de_yolo_ai 
                 PROPERTIES 
                     OUTPUT_NAME "de_yolo_ai"
                     SUFFIX ".so"
@@ -126,11 +134,20 @@ set_target_properties( OUTPUT_BINARY
 
 
 
-target_compile_options(OUTPUT_BINARY
+target_compile_options(de_yolo_ai
     PRIVATE
         -Wall
         -Wno-return-type-c-linkage
 )
+
+# Highlight if DDEBUG or TEST_MODE_NO_HAILO_LINK are enabled
+if (DDEBUG)
+    message(STATUS "${Red}Option DDEBUG is ENABLED.${ColourReset}")
+endif()
+
+if (TEST_MODE_NO_HAILO_LINK)
+    message(STATUS "${Red}Option TEST_MODE_NO_HAILO_LINK (No Hailo Link) is ENABLED.${ColourReset}")
+endif()
 
 configure_file(de_yolo_ai.config.module.json ${OUTPUT_DIRECTORY}/de_yolo_ai.config.module.json COPYONLY)
 
