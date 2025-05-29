@@ -32,22 +32,6 @@
 
 using namespace de::yolo_ai;
 
-// Class names for COCO dataset (YOLOv8)
-// std::vector<std::string> classNames = {
-//     "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat",
-//     "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat",
-//     "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack",
-//     "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball",
-//     "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket",
-//     "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple",
-//     "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair",
-//     "couch", "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse",
-//     "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink",
-//     "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier",
-//     "toothbrush"
-// };
-
-
 // Default paths and parameters
 float confidenceThreshold = 0.5f;
 float nmsIoUThreshold = 0.45f;
@@ -80,9 +64,9 @@ bool CYOLOAI::init(const std::string& source_video_path, const std::string& hef_
 
 bool CYOLOAI::uninit() { return true;}
 
-int CYOLOAI::run() {
-    
 
+
+int CYOLOAI::run() {
             
 using namespace std::literals::chrono_literals;
 
@@ -142,8 +126,15 @@ using namespace std::literals::chrono_literals;
     fprintf(stderr, "Input tensor name: %s, frame size: %zu bytes\n", input_name.c_str(), input_frame_size);
 
 #else
-    int nnWidth = 520;
-    int nnHeight = 520;
+    
+    unsigned int nnWidth = 0;
+    unsigned int nnHeight = 0;
+
+    if (!CVideo::getVideoResolution(m_source_video_device, nnWidth, nnHeight))
+    {
+        std::cout << _ERROR_CONSOLE_BOLD_TEXT_ << "Error: Failed to access camera " << m_source_video_device << " with V4L2 backend" << _NORMAL_CONSOLE_TEXT_ << std::endl;
+        return 1;
+    }
 #endif
     // --- OpenCV Camera Initialization ---
     cv::VideoCapture cap;
@@ -182,12 +173,9 @@ using namespace std::literals::chrono_literals;
     fmt.type = V4L2_BUF_TYPE_VIDEO_OUTPUT; // We are outputting frames to this device
     fmt.fmt.pix.width = nnWidth;
     fmt.fmt.pix.height = nnHeight;
-    fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUV420; // YUV420 planar (I420)
-    fmt.fmt.pix.field = V4L2_FIELD_NONE; // Progressive scan
-    // For YUV420, sizeimage = width * height * 3 / 2
-    // bytesperline for Y plane is width. For U and V planes, it's width / 2.
-    // Some drivers might calculate this automatically if set to 0, or expect it.
-    fmt.fmt.pix.bytesperline = nnWidth; // Stride of the Y plane
+    fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUV420;  // YUV420 planar (I420)
+    fmt.fmt.pix.field = V4L2_FIELD_NONE;            // Progressive scan
+    fmt.fmt.pix.bytesperline = nnWidth;             // Stride of the Y plane
     fmt.fmt.pix.sizeimage = (nnWidth * nnHeight * 3) / 2;
 
     if (de::yolo_ai::CVideo::xioctl(video_fd, VIDIOC_S_FMT, &fmt) < 0) {
@@ -341,7 +329,7 @@ using namespace std::literals::chrono_literals;
                 // EAGAIN or EWOULDBLOCK might occur if O_NONBLOCK is used and buffer is full.
                 if (errno == EAGAIN || errno == EWOULDBLOCK) {
                     std::cout << "Warning: Virtual device " << m_output_video_device << " buffer full? Try reading from it." << std::endl;
-                    // continue; // Optionally, skip frame and try next
+                    continue; // Optionally, skip frame and try next
                 }
                 // For other errors, it's likely more serious
                 // break; // Uncomment to stop on write error
@@ -360,10 +348,7 @@ using namespace std::literals::chrono_literals;
             free(tensor.data);
         }
 #endif
-        // Optional: Display window (for local debugging, not needed for pure V4L2 streaming)
-        // cv::imshow("Hailo Detection Stream", display_frame);
-        // if (cv::waitKey(1) >= 0) break; // Exit on any key press
-
+        
     } // End of while(true) loop
 
     // --- Cleanup ---
@@ -373,7 +358,6 @@ using namespace std::literals::chrono_literals;
         fprintf(stderr, "Closed virtual video device %s\n", m_output_video_device.c_str());
     }
     cap.release();
-    // cv::destroyAllWindows(); // If imshow was used
 
     return 0;
 }

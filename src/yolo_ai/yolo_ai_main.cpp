@@ -37,21 +37,21 @@ bool CYOLOAI_Main::init()
     
     std::string output_video_device = jsonConfig["output_video_device"].get<std::string>();
 
-    std::cout << _SUCCESS_CONSOLE_BOLD_TEXT_ << "Video Output:" << _INFO_CONSOLE_TEXT << output_video_device << _NORMAL_CONSOLE_TEXT_ << std::endl;
+    std::cout << _SUCCESS_CONSOLE_BOLD_TEXT_ << "Video Output: " << _INFO_CONSOLE_TEXT << output_video_device << _NORMAL_CONSOLE_TEXT_ << std::endl;
     
     if (!validateField(jsonConfig, "model_path", nlohmann::json::value_t::string))
     {
-        std::cout << _ERROR_CONSOLE_BOLD_TEXT_ << "Fatal Error:" << _NORMAL_CONSOLE_TEXT_ << " Missing field or bad string format " << _INFO_CONSOLE_BOLD_TEXT << " model_path " << _NORMAL_CONSOLE_TEXT_<< std::endl;
+        std::cout << _ERROR_CONSOLE_BOLD_TEXT_ << "Fatal Error: " << _NORMAL_CONSOLE_TEXT_ << " Missing field or bad string format " << _INFO_CONSOLE_BOLD_TEXT << " model_path " << _NORMAL_CONSOLE_TEXT_<< std::endl;
         exit(1);
     }
     
     std::string model_path = jsonConfig["model_path"].get<std::string>();
 
-    std::cout << _SUCCESS_CONSOLE_BOLD_TEXT_ << "model_path:" << _INFO_CONSOLE_TEXT << model_path << _NORMAL_CONSOLE_TEXT_ << std::endl;
+    std::cout << _SUCCESS_CONSOLE_BOLD_TEXT_ << "model_path: " << _INFO_CONSOLE_TEXT << model_path << _NORMAL_CONSOLE_TEXT_ << std::endl;
     
     if (!validateField(jsonConfig, "class_names", nlohmann::json::value_t::array))
     {
-        std::cout << _ERROR_CONSOLE_BOLD_TEXT_ << "Fatal Error:" << _NORMAL_CONSOLE_TEXT_ << "Missing field or bad array format " << _INFO_CONSOLE_BOLD_TEXT << " classNames " << _NORMAL_CONSOLE_TEXT_<< std::endl;
+        std::cout << _ERROR_CONSOLE_BOLD_TEXT_ << "Fatal Error: " << _NORMAL_CONSOLE_TEXT_ << "Missing field or bad array format " << _INFO_CONSOLE_BOLD_TEXT << " classNames " << _NORMAL_CONSOLE_TEXT_<< std::endl;
         exit(1);
     }
     
@@ -65,7 +65,7 @@ bool CYOLOAI_Main::init()
             }
         }
     
-    std::cout << _SUCCESS_CONSOLE_BOLD_TEXT_ << "class_names:" << _INFO_CONSOLE_TEXT << "filled." << _NORMAL_CONSOLE_TEXT_ << std::endl;
+    std::cout << _SUCCESS_CONSOLE_BOLD_TEXT_ << "class_names: " << _INFO_CONSOLE_TEXT << "filled." << _NORMAL_CONSOLE_TEXT_ << std::endl;
     
     m_yolo_ai.init(source_video_device, model_path, output_video_device, class_names);
 
