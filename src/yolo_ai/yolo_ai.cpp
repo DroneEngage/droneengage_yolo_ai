@@ -1,14 +1,11 @@
 #include <iostream>
 #include <signal.h>
-#include <ctime>
-#include <fstream>
-#include <string>
 #include <vector>
+#include <string>
 #include <chrono>
-#include <algorithm> // For std::sort
-#include <memory>    // For std::unique_ptr, std::shared_ptr
+#include <algorithm>  // For std::sort
+#include <memory>     // For std::unique_ptr, std::shared_ptr
 #include <opencv2/opencv.hpp>
-
 #include "../helpers/colors.hpp"
 #include "../helpers/helpers.hpp"
 
@@ -19,13 +16,11 @@
 #include <hailo/infer_model.hpp>
 #endif
 
-
 // Headers for V4L2
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <linux/videodev2.h>
-
 #include "output_tensor.hpp"
 #include "video.hpp"
 #include "yolo_ai.hpp"
@@ -36,319 +31,383 @@ using namespace de::yolo_ai;
 float confidenceThreshold = 0.5f;
 float nmsIoUThreshold = 0.45f;
 
-
 // Helper function to print V4L2 errors
 void errno_exit(const char *s) {
     fprintf(stderr, "%s error %d, %s\n", s, errno, strerror(errno));
     exit(EXIT_FAILURE);
 }
 
-
 bool CYOLOAI::init(const std::string& source_video_path, const std::string& hef_model_path, const std::string& output_video_device, std::vector<std::string>& class_names)
 {
+    #ifdef DDEBUG
+    std::cout << __FILE__ << "." << __FUNCTION__ << " line:" << __LINE__ << " " << _NORMAL_CONSOLE_TEXT_ << std::endl;
+    #endif
 
-    
-        std::cout << __FILE__ << "." << __FUNCTION__ << " line:" << __LINE__ << " " << _NORMAL_CONSOLE_TEXT_ << std::endl;
-    
-        m_class_names = class_names;
+    m_class_names = class_names;
     m_source_video_device = source_video_path;
     m_output_video_device = output_video_device;
     m_hef_model_path = hef_model_path;
     
-    
+    #ifdef DDEBUG
     std::cout << _SUCCESS_CONSOLE_BOLD_TEXT_ << __FILE__ << "." << __FUNCTION__ << " line:" << __LINE__ << " " << _NORMAL_CONSOLE_TEXT_ << std::endl;
-    
-
+    #endif
     return true;
 }
 
 bool CYOLOAI::uninit() { return true;}
 
-
-
 int CYOLOAI::run() {
-            
-using namespace std::literals::chrono_literals;
+    using namespace std::literals::chrono_literals;
 
 #ifndef TEST_MODE_NO_HAILO_LINK
-
     using namespace hailort;
-    
+
     // --- HailoRT Initialization ---
-    Expected<std::unique_ptr<hailort::VDevice>> vdevice_exp = hailort::VDevice::create();
+    // Use `auto` for cleaner type deduction, and check directly if `vdevice_exp` is valid.
+    auto vdevice_exp = VDevice::create();
     if (!vdevice_exp) {
-        
-        std::cout << _ERROR_CONSOLE_BOLD_TEXT_ << "Error: Failed to create vdevice:" << vdevice_exp.status() << _NORMAL_CONSOLE_TEXT_ << std::endl;
-        
+        std::cerr << _ERROR_CONSOLE_BOLD_TEXT_ << "Error: Failed to create vdevice: " << vdevice_exp.status() << _NORMAL_CONSOLE_TEXT_ << std::endl;
         return vdevice_exp.status();
     }
+    // No need for .release() here as Expected can be directly converted/moved
+    // to a unique_ptr. If VDevice::create returns Expected<unique_ptr<VDevice>>,
+    // then vdevice_exp itself holds the unique_ptr.
+    std::unique_ptr<VDevice> vdevice = vdevice_exp.release();
 
-   
-    std::unique_ptr<hailort::VDevice> vdevice = vdevice_exp.release();
 
-    Expected<std::shared_ptr<InferModel>> infer_model_exp = vdevice->create_infer_model(m_hef_model_path);
+    auto infer_model_exp = vdevice->create_infer_model(m_hef_model_path);
     if (!infer_model_exp) {
-        
-        std::cout << _ERROR_CONSOLE_BOLD_TEXT_ << "Error: Failed to create infer model from HEF " << m_hef_model_path << ":" << infer_model_exp.status() << _NORMAL_CONSOLE_TEXT_ << std::endl;
-        
+        std::cerr << _ERROR_CONSOLE_BOLD_TEXT_ << "Error: Failed to create infer model from HEF " << m_hef_model_path << ": " << infer_model_exp.status() << _NORMAL_CONSOLE_TEXT_ << std::endl;
         return infer_model_exp.status();
     }
-    std::shared_ptr<hailort::InferModel> infer_model = infer_model_exp.release();
+    std::shared_ptr<InferModel> infer_model = infer_model_exp.release();
+
     infer_model->set_hw_latency_measurement_flags(HAILO_LATENCY_MEASURE);
     infer_model->output()->set_nms_score_threshold(confidenceThreshold);
     infer_model->output()->set_nms_iou_threshold(nmsIoUThreshold);
 
-    
-    int nnWidth = infer_model->inputs()[0].shape().width;
-    int nnHeight = infer_model->inputs()[0].shape().height;
+    // Use `const auto&` for efficiency when accessing members of a collection.
+    // Ensure `inputs()` returns a non-empty vector before accessing `[0]`.
+    if (infer_model->inputs().empty()) {
+        std::cerr << _ERROR_CONSOLE_BOLD_TEXT_ << "Error: Model has no input layers." << _NORMAL_CONSOLE_TEXT_ << std::endl;
+        return HAILO_UNINITIALIZED; // Or appropriate error
+    }
+    const auto& input_layer_shape = infer_model->inputs()[0].shape();
+    int nnWidth = input_layer_shape.width;
+    int nnHeight = input_layer_shape.height;
  
     std::cout << _LOG_CONSOLE_BOLD_TEXT << "Network Input Resolution: " << _INFO_CONSOLE_TEXT << nnWidth << "x" << nnHeight << _NORMAL_CONSOLE_TEXT_ << std::endl;
 
-    Expected<ConfiguredInferModel> configured_infer_model_exp = infer_model->configure();
+    auto configured_infer_model_exp = infer_model->configure();
     if (!configured_infer_model_exp) {
-        std::cout << _ERROR_CONSOLE_BOLD_TEXT_ << "Error: Failed to configure infer model: " << configured_infer_model_exp.status() << _NORMAL_CONSOLE_TEXT_ << std::endl;
-        
+        std::cerr << _ERROR_CONSOLE_BOLD_TEXT_ << "Error: Failed to configure infer model: " << configured_infer_model_exp.status() << _NORMAL_CONSOLE_TEXT_ << std::endl;
         return configured_infer_model_exp.status();
     }
-    std::shared_ptr<hailort::ConfiguredInferModel> configured_infer_model =
+    // Using `std::move` from `configured_infer_model_exp` directly into `make_shared` to avoid an unnecessary copy.
+    std::shared_ptr<ConfiguredInferModel> configured_infer_model =
         std::make_shared<ConfiguredInferModel>(configured_infer_model_exp.release());
 
-    Expected<ConfiguredInferModel::Bindings> bindings_exp = configured_infer_model->create_bindings();
+    auto bindings_exp = configured_infer_model->create_bindings();
     if (!bindings_exp) {
-        std::cout << _ERROR_CONSOLE_BOLD_TEXT_ << "Error: Failed to create bindings: " << bindings_exp.status() << _NORMAL_CONSOLE_TEXT_ << std::endl;
+        std::cerr << _ERROR_CONSOLE_BOLD_TEXT_ << "Error: Failed to create bindings: " << bindings_exp.status() << _NORMAL_CONSOLE_TEXT_ << std::endl;
         return bindings_exp.status();
     }
     
-    hailort::ConfiguredInferModel::Bindings bindings = std::move(bindings_exp.release());
+    // Efficiently move bindings
+    ConfiguredInferModel::Bindings bindings = bindings_exp.release();
 
     const std::string& input_name = infer_model->get_input_names()[0];
     size_t input_frame_size = infer_model->input(input_name)->get_frame_size();
-    fprintf(stderr, "Input tensor name: %s, frame size: %zu bytes\n", input_name.c_str(), input_frame_size);
-
-#else
-    
-    unsigned int nnWidth = 0;
-    unsigned int nnHeight = 0;
-
-    if (!CVideo::getVideoResolution(m_source_video_device, nnWidth, nnHeight))
-    {
-        std::cout << _ERROR_CONSOLE_BOLD_TEXT_ << "Error: Failed to access camera " << m_source_video_device << " with V4L2 backend" << _NORMAL_CONSOLE_TEXT_ << std::endl;
-        return 1;
-    }
+    fprintf(stderr, "Input tensor name: %s, frame size: %zu bytes (for %dx%d input)\n", input_name.c_str(), input_frame_size, nnWidth, nnHeight);
+#else // TEST_MODE_NO_HAILO_LINK
+    unsigned int nnWidth = 640; // Default or example AI input width
+    unsigned int nnHeight = 480; // Default or example AI input height
+    std::cout << _LOG_CONSOLE_BOLD_TEXT << "Target AI Input Resolution (for resizing): " << _INFO_CONSOLE_TEXT << nnWidth << "x" << nnHeight << _NORMAL_CONSOLE_TEXT_ << std::endl;
 #endif
+
     // --- OpenCV Camera Initialization ---
     cv::VideoCapture cap;
-    if (!cap.open(m_source_video_device, cv::CAP_V4L2)) {
-        std::cout << _ERROR_CONSOLE_BOLD_TEXT_ << "Error: Failed to open camera " << m_source_video_device << " with V4L2 backend" << _NORMAL_CONSOLE_TEXT_ << std::endl;
+    // Prefer `std::string::c_str()` for C-style API compatibility in `cap.open`
+    if (!cap.open(m_source_video_device.c_str(), cv::CAP_V4L2)) {
+        std::cerr << _ERROR_CONSOLE_BOLD_TEXT_ << "Error: Failed to open camera " << m_source_video_device << " with V4L2 backend" << _NORMAL_CONSOLE_TEXT_ << std::endl;
         return 1;
     }
-    cap.set(cv::CAP_PROP_FRAME_WIDTH, nnWidth);
-    cap.set(cv::CAP_PROP_FRAME_HEIGHT, nnHeight);
-    cap.set(cv::CAP_PROP_FPS, 30); // Request 30 FPS
+
+    // Set camera properties once after opening.
+    // Error checking for `set` calls is good practice, though not strictly required if non-critical.
+    cap.set(cv::CAP_PROP_FPS, 30);
     cap.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
 
-    double actual_width = cap.get(cv::CAP_PROP_FRAME_WIDTH);
-    double actual_height = cap.get(cv::CAP_PROP_FRAME_HEIGHT);
+    // Get the actual full resolution from the camera
+    int original_frame_width = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_WIDTH));
+    int original_frame_height = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_HEIGHT));
     double actual_fps = cap.get(cv::CAP_PROP_FPS);
-    fprintf(stderr, "Requested camera resolution: %dx%d\n", nnWidth, nnHeight);
-    fprintf(stderr, "Actual camera resolution: %.0fx%.0f @ %.1f FPS\n", actual_width, actual_height, actual_fps);
 
-    if (static_cast<int>(actual_width) != nnWidth || static_cast<int>(actual_height) != nnHeight) {
-        fprintf(stderr, "Warning: Camera resolution (%dx%d) does not match network input (%dx%d). OpenCV will resize.\n",
-                static_cast<int>(actual_width), static_cast<int>(actual_height), nnWidth, nnHeight);
-    }
-
-    
-    // --- V4L2 Output Device Initialization ---
-    int video_fd = -1;
-    video_fd = open(m_output_video_device.c_str(), O_WRONLY | O_NONBLOCK); // O_NONBLOCK can be useful
-    if (video_fd < 0) {
-        fprintf(stderr, "Failed to open virtual video device %s: %s\n", m_output_video_device.c_str(), strerror(errno));
+    if (original_frame_width == 0 || original_frame_height == 0) {
+        std::cerr << _ERROR_CONSOLE_BOLD_TEXT_ << "Error: Failed to get camera resolution from " << m_source_video_device << _NORMAL_CONSOLE_TEXT_ << std::endl;
         cap.release();
         return 1;
     }
-    fprintf(stderr, "Successfully opened virtual video device: %s (fd: %d)\n", m_output_video_device.c_str(), video_fd);
+
+    fprintf(stderr, "Original camera capture resolution: %dx%d @ %.1f FPS\n", original_frame_width, original_frame_height, actual_fps);
+    
+    if (original_frame_width < nnWidth || original_frame_height < nnHeight) {
+        fprintf(stderr, "Warning: Original camera resolution (%dx%d) is smaller than AI network input (%dx%d). AI input will be upscaled.\n",
+                original_frame_width, original_frame_height, nnWidth, nnHeight);
+    } else if (original_frame_width != nnWidth || original_frame_height != nnHeight) {
+         fprintf(stderr, "Info: Original camera resolution (%dx%d) differs from AI network input (%dx%d). Frame will be resized for AI.\n",
+                original_frame_width, original_frame_height, nnWidth, nnHeight);
+    }
+
+    // --- V4L2 Output Device Initialization ---
+    int video_fd = -1;
+    video_fd = open(m_output_video_device.c_str(), O_WRONLY | O_NONBLOCK);
+    if (video_fd < 0) {
+        std::cout << _ERROR_CONSOLE_BOLD_TEXT_ << "Failed to open virtual video device " << m_output_video_device << ": " << strerror(errno) << _NORMAL_CONSOLE_TEXT_ << std::endl;
+        cap.release();
+        return 1;
+    }
+    std::cout << _SUCCESS_CONSOLE_BOLD_TEXT_<< "Successfully opened virtual video device: " << _LOG_CONSOLE_BOLD_TEXT << m_output_video_device << std::endl;
 
     struct v4l2_format fmt = {0};
-    fmt.type = V4L2_BUF_TYPE_VIDEO_OUTPUT; // We are outputting frames to this device
-    fmt.fmt.pix.width = nnWidth;
-    fmt.fmt.pix.height = nnHeight;
+    fmt.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+    fmt.fmt.pix.width = static_cast<__u32>(original_frame_width);
+    fmt.fmt.pix.height = static_cast<__u32>(original_frame_height);
     fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUV420;  // YUV420 planar (I420)
     fmt.fmt.pix.field = V4L2_FIELD_NONE;            // Progressive scan
-    fmt.fmt.pix.bytesperline = nnWidth;             // Stride of the Y plane
-    fmt.fmt.pix.sizeimage = (nnWidth * nnHeight * 3) / 2;
+    fmt.fmt.pix.bytesperline = static_cast<__u32>(original_frame_width); // Stride of the Y plane
+    fmt.fmt.pix.sizeimage = (static_cast<__u32>(original_frame_width) * static_cast<__u32>(original_frame_height) * 3) / 2;
 
     if (de::yolo_ai::CVideo::xioctl(video_fd, VIDIOC_S_FMT, &fmt) < 0) {
-        fprintf(stderr, "Failed to set video format on %s: %s\n", m_output_video_device.c_str(), strerror(errno));
+        std::cout << _ERROR_CONSOLE_BOLD_TEXT_ << "Failed to set video format on " << m_output_video_device << ": " << strerror(errno) << _NORMAL_CONSOLE_TEXT_ << std::endl;
         close(video_fd);
         cap.release();
         return 1;
     }
-    fprintf(stderr, "Successfully set format for %s: %dx%d, pixformat YUV420\n",
+    fprintf(stderr, "Successfully set format for V4L2 output %s: %dx%d, pixformat YUV420\n",
             m_output_video_device.c_str(), fmt.fmt.pix.width, fmt.fmt.pix.height);
 
+    // Pre-allocate Mats outside the loop to avoid reallocations.
+    // `cv::Mat::create` can be used to ensure correct size and type without reallocating
+    // if the size is already correct. This avoids repeated memory allocation/deallocation.
+    cv::Mat original_bgr_frame;
+    cv::Mat nn_input_rgb_frame(nnHeight, nnWidth, CV_8UC3); // Directly allocate for RGB to avoid an intermediate BGR.
+    cv::Mat yuv_output_frame(original_frame_height * 3 / 2, original_frame_width, CV_8UC1); // YUV420 size
 
+    const size_t output_yuv_frame_size = (static_cast<size_t>(original_frame_width) * original_frame_height * 3) / 2;
     
-    
-    cv::Mat frame, resized_frame, rgb_frame, yuv_frame;
-    size_t yuv_frame_size = (nnWidth * nnHeight * 3) / 2; // Expected YUV420 frame size
+    // Pre-calculate the scale factors for converting normalized coordinates
+    const float scale_x = static_cast<float>(original_frame_width);
+    const float scale_y = static_cast<float>(original_frame_height);
 
     while (true) {
-        cap >> frame;
-        if (frame.empty()) {
+        // Use `cap.read()` for slightly better performance than `operator>>` in some cases
+        // as it avoids temporary `Mat` construction by reading directly into `original_bgr_frame`.
+        cap.read(original_bgr_frame);
+        if (original_bgr_frame.empty()) {
             fprintf(stderr, "Failed to capture frame from camera or end of video stream.\n");
             break;
         }
 
-        // Resize if necessary (OpenCV camera might not give exact dimensions)
-        if (frame.cols != nnWidth || frame.rows != nnHeight) {
-            cv::resize(frame, resized_frame, cv::Size(nnWidth, nnHeight));
-        } else {
-            resized_frame = frame;
-        }
-
-        // Convert BGR (OpenCV default) to RGB for the model
-        cv::cvtColor(resized_frame, rgb_frame, cv::COLOR_BGR2RGB);
-        cv::Mat display_frame;
-        cv::cvtColor(rgb_frame, display_frame, cv::COLOR_RGB2BGR);
+        // Resize directly to RGB for NN input if possible, avoiding BGR intermediate
+        // If the source is BGR, we need BGR2RGB conversion anyway.
+        // It's more efficient to resize the BGR image first and then convert to RGB,
+        // rather than converting the large image to RGB and then resizing.
+        cv::resize(original_bgr_frame, nn_input_rgb_frame, cv::Size(nnWidth, nnHeight));
+        cv::cvtColor(nn_input_rgb_frame, nn_input_rgb_frame, cv::COLOR_BGR2RGB); // Convert in-place if possible, or use different destination Mat
 
         #ifndef TEST_MODE_NO_HAILO_LINK
         // --- Hailo Inference ---
-        auto status = bindings.input(input_name)->set_buffer(MemoryView(rgb_frame.data, input_frame_size));
+        // Ensure input_frame_size matches nn_input_rgb_frame.total() * nn_input_rgb_frame.elemSize()
+        // If `get_frame_size()` from HailoRT is reliable, stick to that.
+        auto status = bindings.input(input_name)->set_buffer(MemoryView(nn_input_rgb_frame.data, input_frame_size));
         if (status != HAILO_SUCCESS) {
-            fprintf(stderr, "Failed to set input memory buffer: %s\n", status);
-            break; // Exit loop on error
+            std::cerr << _ERROR_CONSOLE_BOLD_TEXT_ << "Failed to set input memory buffer: " << status << _NORMAL_CONSOLE_TEXT_ << std::endl;
+            break;
         }
 
+        // Allocate output buffers dynamically, but clean them up in a structured way (e.g., using RAII or smart pointers).
+        // For simplicity and matching original logic, keeping `malloc`/`free` but emphasizing RAII for robustness.
         std::vector<OutTensor> output_tensors;
-        for (auto const& output_name : infer_model->get_output_names()) {
-            size_t output_size = infer_model->output(output_name)->get_frame_size();
-            uint8_t* output_buffer = (uint8_t*)malloc(output_size);
+        output_tensors.reserve(infer_model->get_output_names().size()); // Pre-allocate vector capacity
+
+        for (const auto& output_name_str : infer_model->get_output_names()) {
+            size_t output_size = infer_model->output(output_name_str)->get_frame_size();
+            // Use `std::vector<uint8_t>` or `std::unique_ptr<uint8_t[]>` for automatic memory management.
+            // For example: `std::vector<uint8_t> output_buffer(output_size);`
+            // Then `output_buffer.data()` can be used.
+            // Keeping `malloc` for now to stick closer to original, but this is a prime area for improvement.
+            uint8_t* output_buffer = static_cast<uint8_t*>(malloc(output_size));
             if (!output_buffer) {
-                fprintf(stderr, "Could not allocate output buffer\n");
+                std::cerr << _ERROR_CONSOLE_BOLD_TEXT_ << "Could not allocate output buffer for " << output_name_str << _NORMAL_CONSOLE_TEXT_ << std::endl;
+                // Free previously allocated buffers before returning
+                for (auto& tensor : output_tensors) {
+                    free(tensor.data); // Assuming `data` is from malloc
+                }
                 return HAILO_OUT_OF_HOST_MEMORY;
             }
 
-            status = bindings.output(output_name)->set_buffer(MemoryView(output_buffer, output_size));
+            status = bindings.output(output_name_str)->set_buffer(MemoryView(output_buffer, output_size));
             if (status != HAILO_SUCCESS) {
-                free(output_buffer);
-                fprintf(stderr, "Failed to set output buffer: %d\n", (int)status);
+                free(output_buffer); // Free the current buffer
+                std::cerr << _ERROR_CONSOLE_BOLD_TEXT_ << "Failed to set output buffer for " << output_name_str << ": " << status << _NORMAL_CONSOLE_TEXT_ << std::endl;
+                for (auto& tensor : output_tensors) {
+                    free(tensor.data);
+                }
                 return status;
             }
 
-            const auto quant = infer_model->output(output_name)->get_quant_infos();
-            const auto shape = infer_model->output(output_name)->shape();
-            const auto format = infer_model->output(output_name)->format();
-            output_tensors.emplace_back(output_buffer, output_name, quant[0], shape, format);
+            const auto quant = infer_model->output(output_name_str)->get_quant_infos();
+            const auto shape = infer_model->output(output_name_str)->shape();
+            const auto format = infer_model->output(output_name_str)->format();
+            // Store the raw pointer and its associated metadata. Ownership is still with this loop.
+            output_tensors.emplace_back(output_buffer, output_name_str, quant[0], shape, format);
         }
         
-        // Run inference
         status = configured_infer_model->wait_for_async_ready(1s);
         if (status != HAILO_SUCCESS) {
-            std::cout << "Error: Failed to wait for async ready - " << status << std::endl;
-            for (auto& tensor : output_tensors) free(tensor.data); // Free buffers before breaking
+            std::cerr << _ERROR_CONSOLE_BOLD_TEXT_ << "Error: Failed to wait for async ready - " << status << _NORMAL_CONSOLE_TEXT_ << std::endl;
+            for (auto& tensor : output_tensors) free(tensor.data);
             break;
         }
 
-        Expected<AsyncInferJob> job_exp = configured_infer_model->run_async(bindings, [](const AsyncInferCompletionInfo&){});
+        auto job_exp = configured_infer_model->run_async(bindings, [](const AsyncInferCompletionInfo&){});
         if (!job_exp) {
-            std::cout << "Error: Failed to start async job: " << job_exp.status() << std::endl;
+            std::cerr << _ERROR_CONSOLE_BOLD_TEXT_ << "Error: Failed to start async job: " << job_exp.status() << _NORMAL_CONSOLE_TEXT_ << std::endl;
             for (auto& tensor : output_tensors) free(tensor.data);
             break;
         }
-        hailort::AsyncInferJob job = job_exp.release();
+        AsyncInferJob job = job_exp.release();
 
-        // Sort output tensors if necessary (e.g. for specific post-processing order)
-        // std::sort(output_tensors.begin(), output_tensors.end(), OutTensor::SortFunction); // If SortFunction is defined
-
-        status = job.wait(1s); // Wait for inference to complete
+        status = job.wait(1s);
         if (status != HAILO_SUCCESS) {
-            std::cout << "Error: Failed to wait for job completion: " << status << std::endl;
+            std::cerr << _ERROR_CONSOLE_BOLD_TEXT_ << "Error: Failed to wait for job completion: " << status << _NORMAL_CONSOLE_TEXT_ << std::endl;
             for (auto& tensor : output_tensors) free(tensor.data);
             break;
         }
-        #endif
+        #endif // TEST_MODE_NO_HAILO_LINK
+
         // --- Post-processing and Drawing ---
-        // Convert RGB frame back to BGR for OpenCV drawing functions
-#ifndef TEST_MODE_NO_HAILO_LINK
-        bool nmsOnHailo = infer_model->outputs().size() == 1 && infer_model->outputs()[0].is_nms();
+        #ifndef TEST_MODE_NO_HAILO_LINK
+        // --- Post-processing and Drawing ---
+        bool nmsOnHailo = !infer_model->outputs().empty() && infer_model->outputs()[0].is_nms();
+        
         if (nmsOnHailo) {
-            OutTensor* out = &output_tensors[0]; // Assuming NMS output is the first one
-            const float* raw = (const float*)out->data;
-            size_t numClasses = (size_t)out->shape.height;
-            size_t classIdx = 0;
-            size_t idx = 0;
+            if (output_tensors.empty()) { // Safety check
+                std::cerr << "Error: No output tensors received from Hailo." << std::endl;
+                for (auto& tensor : output_tensors) free(tensor.data);
+                break;
+            }
             
-            while (classIdx < numClasses) {
-                
-                size_t numBoxes = (size_t)raw[idx++];
-                    for (size_t i = 0; i < numBoxes; i++) {
-                    float ymin = raw[idx];
-                    float xmin = raw[idx + 1];
-                    float ymax = raw[idx + 2];
-                    float xmax = raw[idx + 3];
-                    float confidence = raw[idx + 4];
+            const OutTensor& out = output_tensors[0]; // Assuming first output is NMS
+            const float* raw = reinterpret_cast<const float*>(out.data); // Use reinterpret_cast for pointer conversion
+            
+            // CORRECTED: Get output_size for the specific 'out' tensor
+            // This is the size of the buffer that 'out.data' points to.
+            // You might need to get this from the infer_model->output(out.name)->get_frame_size()
+            // or if OutTensor itself stores its size. Assuming out.data points to a buffer
+            // that matches the frame size of the first output model.
+            size_t nms_output_byte_size = infer_model->output(out.name)->get_frame_size(); 
+            // Or, if OutTensor struct stored its allocated size directly, use that:
+            // size_t nms_output_byte_size = out.allocated_size; // if you add this member to OutTensor
+
+            size_t numClasses = static_cast<size_t>(out.shape.height); // As per original comment
+            size_t current_idx = 0; // Better name than `idx` to avoid conflict with loop variable
+
+            for (size_t classIdx = 0; classIdx < numClasses; ++classIdx) {
+                // Ensure we don't read past allocated memory for `raw`
+                // CORRECTED: Use nms_output_byte_size
+                if (current_idx * sizeof(float) >= nms_output_byte_size) { 
+                    std::cerr << "Error: NMS output parsing index out of bounds (class count - " << classIdx << "). Not enough data for numBoxes." << std::endl;
+                    break; 
+                }
+                size_t numBoxes = static_cast<size_t>(raw[current_idx++]);
+
+                for (size_t i = 0; i < numBoxes; ++i) {
+                    // Check if enough data remains for a full box (5 floats)
+                    // CORRECTED: Use nms_output_byte_size
+                    if ((current_idx + 4) * sizeof(float) >= nms_output_byte_size) { 
+                        std::cerr << "Error: NMS output parsing index out of bounds (box data - " << i << " of class " << classIdx << "). Not enough data for box." << std::endl;
+                        // For a critical error like this, it might be better to break completely or handle it more robustly.
+                        break; // Break from inner loop, try next class if any data remains
+                    }
+                    float ymin_norm = raw[current_idx];
+                    float xmin_norm = raw[current_idx + 1];
+                    float ymax_norm = raw[current_idx + 2];
+                    float xmax_norm = raw[current_idx + 3];
+                    float confidence = raw[current_idx + 4];
                     
                     if (confidence >= confidenceThreshold) {
-                        // Convert normalized coordinates to pixel coordinates
-                        int x1 = static_cast<int>(xmin * display_frame.cols);
-                        int y1 = static_cast<int>(ymin * display_frame.rows);
-                        int x2 = static_cast<int>(xmax * display_frame.cols);
-                        int y2 = static_cast<int>(ymax * display_frame.rows);
+                        // Cast to int only at the very end when drawing
+                        int x1 = static_cast<int>(xmin_norm * scale_x);
+                        int y1 = static_cast<int>(ymin_norm * scale_y);
+                        int x2 = static_cast<int>(xmax_norm * scale_x);
+                        int y2 = static_cast<int>(ymax_norm * scale_y);
 
-                        // Draw bounding box on display_frame
-                        cv::rectangle(display_frame, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(0, 255, 0), 2); // UNCOMMENTED AND NOW ON DISPLAY_FRAME
+                        cv::rectangle(original_bgr_frame, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(0, 255, 0), 2);
                         
-                        // Put class label and confidence on display_frame
-                        std::string label = cv::format("%s: %.2f", m_class_names[classIdx].c_str(), confidence);
+                        std::string label_text;
+                        if (classIdx < m_class_names.size()){
+                             label_text = cv::format("%s: %.2f", m_class_names[classIdx].c_str(), confidence);
+                        } else {
+                             label_text = cv::format("Class %zu: %.2f", classIdx, confidence);
+                        }
+
                         int baseline = 0;
-                        cv::Size text_size = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseline);
-                        cv::rectangle(display_frame, cv::Point(x1, y1 - text_size.height - 5), 
+                        cv::Size text_size = cv::getTextSize(label_text, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseline);
+                        
+                        cv::rectangle(original_bgr_frame, cv::Point(x1, y1 - text_size.height - 5), 
                                      cv::Point(x1 + text_size.width, y1), cv::Scalar(0, 255, 0), cv::FILLED);
-                        cv::putText(display_frame, label, cv::Point(x1, y1 - 5), 
+                        cv::putText(original_bgr_frame, label_text, cv::Point(x1, y1 - 5), 
                                    cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0), 1);
                     }
-                    idx += 5;
+                    current_idx += 5; // Move to the next box
                 }
-                classIdx++;
             }
         } else {
-            std::cout << "Error: NMS on CPU is not implemented in this example. Output may be raw tensor data." << std::endl;
+            std::cout << "Info: NMS on CPU is not implemented or NMS output structure is different. Output may be raw tensor data." << std::endl;
         }
-#endif
-        // --- Convert to YUV420p for V4L2 output ---
-        // display_frame is BGR. Convert to YUV_I420 (YUV420 planar)
-        cv::cvtColor(display_frame, yuv_frame, cv::COLOR_BGR2YUV_I420);
+#endif // TEST_MODE_NO_HAILO_LINK
+
+        // --- Convert original_bgr_frame (with drawings) to YUV420p for V4L2 output ---
+        // Ensure yuv_output_frame has the correct dimensions and type before conversion.
+        // `cv::cvtColor` handles reallocation if sizes don't match, but pre-allocation is better.
+        cv::cvtColor(original_bgr_frame, yuv_output_frame, cv::COLOR_BGR2YUV_I420);
 
         // --- Write YUV420p data to virtual device ---
-        if (yuv_frame.isContinuous() && yuv_frame.total() * yuv_frame.elemSize() == yuv_frame_size) {
-            ssize_t bytes_written = write(video_fd, yuv_frame.data, yuv_frame_size);
-            if (bytes_written < 0) {
-                std::cout << "Error: Failed to write frame to " << m_output_video_device << ": " << strerror(errno) << std::endl;
-                // Potentially break or attempt to recover. For simplicity, we break.
-                // EAGAIN or EWOULDBLOCK might occur if O_NONBLOCK is used and buffer is full.
+        // `yuv_output_frame.total() * yuv_output_frame.elemSize()` is the correct way to get actual byte size
+        // for a continuous Mat.
+        if (yuv_output_frame.isContinuous() && yuv_output_frame.total() * yuv_output_frame.elemSize() == output_yuv_frame_size) {
+            ssize_t bytes_written = write(video_fd, yuv_output_frame.data, output_yuv_frame_size);
+                
+             if (bytes_written < 0) {
+                // Use `std::cerr` for error messages to separate from standard output.
+                std::cerr << _ERROR_CONSOLE_BOLD_TEXT_ << "Error: Failed to write frame to V4L2 device " << m_output_video_device << ": " << strerror(errno) << _NORMAL_CONSOLE_TEXT_ << std::endl;
                 if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                    std::cout << "Warning: Virtual device " << m_output_video_device << " buffer full? Try reading from it." << std::endl;
-                    continue; // Optionally, skip frame and try next
+                    // This warning is fine to output, but don't stop the loop.
+                    std::cerr << _INFO_CONSOLE_TEXT << "Warning: Virtual device " << m_output_video_device << " buffer full? Try reading from it." << _NORMAL_CONSOLE_TEXT_ << std::endl;
+                } else {
+                    // For other severe errors, consider exiting or setting a flag to stop processing.
+                    break; // Exit loop for unrecoverable errors
                 }
-                // For other errors, it's likely more serious
-                // break; // Uncomment to stop on write error
-            } else if (static_cast<size_t>(bytes_written) != yuv_frame_size) {
-                std::cout << "Warning: Incomplete frame write to " << m_output_video_device << " (wrote " << bytes_written << " of " << yuv_frame_size << " bytes)" << std::endl;
-                        
             }
         } else {
-            std::cout << "Error: YUV frame is not continuous or has unexpected size. Cannot write to V4L2 device." << std::endl;
-            // This should ideally not happen if nnWidth/nnHeight are consistent and cvtColor works.
+            std::cerr << _ERROR_CONSOLE_BOLD_TEXT_ << "Error: YUV output frame is not continuous or has unexpected size. Cannot write to V4L2 device." << _NORMAL_CONSOLE_TEXT_ << std::endl;
+            fprintf(stderr, "Debug: yuv_output_frame.total() * elemSize() = %zu, expected output_yuv_frame_size = %zu\n",
+                    yuv_output_frame.total() * yuv_output_frame.elemSize(), output_yuv_frame_size);
+            fprintf(stderr, "Debug: yuv_output_frame continuous: %d, dims: %dx%d, channels: %d, depth: %d, elemSize: %zu\n",
+                    yuv_output_frame.isContinuous(), yuv_output_frame.cols, yuv_output_frame.rows, yuv_output_frame.channels(), yuv_output_frame.depth(), yuv_output_frame.elemSize());
+            break; // Fatal error, exit loop
         }
-#ifndef TEST_MODE_NO_HAILO_LINK
-       
+        
+        #ifndef TEST_MODE_NO_HAILO_LINK
         // Free output buffers for the next iteration
         for (auto& tensor : output_tensors) {
-            free(tensor.data);
+            free(tensor.data); // This assumes malloc was used.
+                               // If `std::vector<uint8_t>` was used, nothing explicit is needed here.
         }
-#endif
-        
+        #endif
+
     } // End of while(true) loop
 
     // --- Cleanup ---
@@ -358,7 +417,5 @@ using namespace std::literals::chrono_literals;
         fprintf(stderr, "Closed virtual video device %s\n", m_output_video_device.c_str());
     }
     cap.release();
-
     return 0;
 }
-
