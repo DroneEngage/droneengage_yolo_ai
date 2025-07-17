@@ -9,12 +9,16 @@
 #include "../helpers/colors.hpp"
 #include "../helpers/helpers.hpp"
 
+#include "../defines.hpp"
+
 #ifndef TEST_MODE_NO_HAILO_LINK
 #include <hailo/hailort.hpp>
 #include <hailo/hailort_common.hpp>
 #include <hailo/vdevice.hpp>
 #include <hailo/infer_model.hpp>
 #endif
+
+#include "../de_common/messages.hpp"
 
 // Headers for V4L2
 #include <fcntl.h>
@@ -37,12 +41,13 @@ void errno_exit(const char *s) {
     exit(EXIT_FAILURE);
 }
 
-bool CYOLOAI::init(const std::string& source_video_path, const std::string& hef_model_path, const std::string& output_video_device, std::vector<std::string>& class_names)
+bool CYOLOAI::init(const std::string& source_video_path, const std::string& hef_model_path, const std::string& output_video_device, std::vector<std::string>& class_names, CCallBack_YOLOAI *callback_yolo_ai)
 {
     #ifdef DDEBUG
     std::cout << __FILE__ << "." << __FUNCTION__ << " line:" << __LINE__ << " " << _NORMAL_CONSOLE_TEXT_ << std::endl;
     #endif
 
+    m_callback_yolo_ai = callback_yolo_ai;
     m_class_names = class_names;
     m_source_video_device = source_video_path;
     m_output_video_device = output_video_device;
@@ -54,7 +59,48 @@ bool CYOLOAI::init(const std::string& source_video_path, const std::string& hef_
     return true;
 }
 
-bool CYOLOAI::uninit() { return true;}
+
+bool CYOLOAI::uninit() { 
+    
+    stop();
+    return true;
+}
+
+
+
+void CYOLOAI::detect()
+{
+    m_is_AI_yolo_active_initial = true;
+    
+    if (m_callback_yolo_ai != nullptr)
+    {
+        m_callback_yolo_ai->onTrackStatusChanged(TrackingTarget_STATUS_AI_Recognition_ENABLED);
+    }
+}
+
+
+void CYOLOAI::pause()
+{
+    std::cout << "pause" <<std::endl;
+    m_is_AI_yolo_active_initial = false;
+
+    if (m_callback_yolo_ai != nullptr)
+    {
+        m_callback_yolo_ai->onTrackStatusChanged(TrackingTarget_STATUS_AI_Recognition_STOPPED);
+    }
+}
+
+
+void CYOLOAI::stop()
+{
+    if (!m_exit_thread) return ; 
+    m_exit_thread = false;
+    
+    if (m_callback_yolo_ai != nullptr)
+    {
+        m_callback_yolo_ai->onTrackStatusChanged(TrackingTarget_STATUS_AI_Recognition_STOPPED);
+    }
+}
 
 int CYOLOAI::run() {
     using namespace std::literals::chrono_literals;
@@ -204,10 +250,13 @@ int CYOLOAI::run() {
         // Use `cap.read()` for slightly better performance than `operator>>` in some cases
         // as it avoids temporary `Mat` construction by reading directly into `original_bgr_frame`.
         cap.read(original_bgr_frame);
-        if (original_bgr_frame.empty()) {
-            fprintf(stderr, "Failed to capture frame from camera or end of video stream.\n");
+        if (!cap.read(original_bgr_frame) || original_bgr_frame.empty()) {
+            std::cerr << _ERROR_CONSOLE_BOLD_TEXT_ << "Failed to capture frame or end of stream." << _NORMAL_CONSOLE_TEXT_ << std::endl;
             break;
         }
+
+        // AI processing (when active)
+        if (m_is_AI_yolo_active_initial) {
 
         // Resize directly to RGB for NN input if possible, avoiding BGR intermediate
         // If the source is BGR, we need BGR2RGB conversion anyway.
@@ -285,6 +334,9 @@ int CYOLOAI::run() {
             for (auto& tensor : output_tensors) free(tensor.data);
             break;
         }
+        #else
+        UNUSED(scale_x);
+        UNUSED(scale_y);
         #endif // TEST_MODE_NO_HAILO_LINK
 
         // --- Post-processing and Drawing ---
@@ -369,6 +421,8 @@ int CYOLOAI::run() {
         }
 #endif // TEST_MODE_NO_HAILO_LINK
 
+        } // END OF ADDITION: if (!m_is_AI_yolo_active_initial) block
+
         // --- Convert original_bgr_frame (with drawings) to YUV420p for V4L2 output ---
         // Ensure yuv_output_frame has the correct dimensions and type before conversion.
         // `cv::cvtColor` handles reallocation if sizes don't match, but pre-allocation is better.
@@ -402,10 +456,10 @@ int CYOLOAI::run() {
         
         #ifndef TEST_MODE_NO_HAILO_LINK
         // Free output buffers for the next iteration
-        for (auto& tensor : output_tensors) {
-            free(tensor.data); // This assumes malloc was used.
-                               // If `std::vector<uint8_t>` was used, nothing explicit is needed here.
-        }
+        // for (auto& tensor : output_tensors) {
+        //     free(tensor.data); // This assumes malloc was used.
+        //                        // If `std::vector<uint8_t>` was used, nothing explicit is needed here.
+        // }
         #endif
 
     } // End of while(true) loop

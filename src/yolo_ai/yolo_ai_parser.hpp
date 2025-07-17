@@ -1,6 +1,9 @@
 #ifndef YOLO_AI_PARSER_H
 #define YOLO_AI_PARSER_H
 
+
+#include "./yolo_ai_main.hpp"
+
 #include "../helpers/json_nlohmann.hpp"
 
 using Json_de = nlohmann::json;
@@ -40,7 +43,7 @@ namespace yolo_ai
             }
 
         private:
-            //de::yolo_ai::CTrackerMain&  m_trackerMain = de::yolo_ai::CTrackerMain::getInstance();
+            de::yolo_ai::CYOLOAI_Main&  m_trackerMain = de::yolo_ai::CYOLOAI_Main::getInstance();
 
     };
 }

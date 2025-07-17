@@ -5,7 +5,7 @@
 #include "../helpers/helpers.hpp"
 
 #include "../de_common/configFile.hpp"
-#include "../de_common/configFile.hpp"
+#include "../de_common/messages.hpp"
 
 #include "yolo_ai_main.hpp"
 
@@ -67,22 +67,22 @@ bool CYOLOAI_Main::init()
     
     std::cout << _SUCCESS_CONSOLE_BOLD_TEXT_ << "class_names: " << _INFO_CONSOLE_TEXT << "filled." << _NORMAL_CONSOLE_TEXT_ << std::endl;
     
-    m_yolo_ai.init(source_video_device, model_path, output_video_device, class_names);
+    m_yolo_ai.init(source_video_device, model_path, output_video_device, class_names, this);
 
-    int status = m_yolo_ai.run();
 
-    if (status == 0) {
-        fprintf(stderr, "Application completed successfully.\n");
-    } else {
-        fprintf(stderr, "Application failed with error code: %d\n", status);
-    }
+    m_threadSenderID = std::thread {[&](){ m_yolo_ai.run();}};
+
     return true;
 }
 
 
 bool CYOLOAI_Main::uninit()
 {
-    
+    m_yolo_ai.stop();
+    if (m_threadSenderID.joinable())
+    {
+        m_threadSenderID.join();
+    }
     return true;
 }
 
@@ -92,5 +92,58 @@ void CYOLOAI_Main::startYolo()
 {
 
 }
-   
+
+
+/**
+ * Called when there is a a tracked object.
+ * output from -0.5 to 0.5
+ * (0,0) top left
+ * center = [(x + w )/2 , (y + h)/2]
+ */
+void CYOLOAI_Main::onTrack (const float& x, const float& y, const float& width, const float& height, const uint16_t camera_orientation, const bool camera_forward) 
+{
+
+    Json_de targets = Json_de::array();
     
+    m_trackerFacade.sendTrackingTargetsLocation (
+        std::string(""),
+        targets
+    );
+}
+
+/**
+ * Called once trackig status changed.
+ */
+void CYOLOAI_Main::onTrackStatusChanged (const int& status)  
+{
+    m_trackerFacade.sendTrackingTargetStatus (
+        std::string(""),
+        status
+    );
+    
+
+    #ifdef DDEBUG
+    std::cout << _INFO_CONSOLE_BOLD_TEXT << "onTrackStatusChanged:" << _LOG_CONSOLE_BOLD_TEXT << std::to_string(status) << _NORMAL_CONSOLE_TEXT_ << std::endl;
+    #endif
+}
+    
+ void CYOLOAI_Main::startTrackingObjects()
+ {
+    m_yolo_ai.detect();
+
+    m_trackerFacade.sendTrackingTargetStatus (
+        std::string(""),
+        TrackingTarget_STATUS_AI_Recognition_ENABLED
+    );
+ }
+
+ void CYOLOAI_Main::stopTracking()
+ {
+    m_yolo_ai.stop();
+ }
+
+void CYOLOAI_Main::pauseTracking()
+{
+    m_yolo_ai.pause();
+
+}

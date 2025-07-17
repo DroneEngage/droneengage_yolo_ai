@@ -25,31 +25,38 @@ void CYOLOAI_Parser::parseMessage (Json_de &andruav_message, const char * full_m
 
     else
     {
-        Json_de message = andruav_message[ANDRUAV_PROTOCOL_MESSAGE_CMD];
-        
+        Json_de cmd = andruav_message[ANDRUAV_PROTOCOL_MESSAGE_CMD];
+        std::cout << cmd << std::endl;
         switch (messageType)
         {
 
-            // case TYPE_AndruavMessage_TrackingTarget:
-            // {
-            //     // a: center X
-            //     // b: center Y
-            //     // r: radius
-
-            //     if ((message.contains("s")) && (message["s"].get<bool>() == true))
-            //     {
-            //         // stop tracking
-            //         m_trackerMain.stopTracking();
-            //         return ;
-            //     }
-            //     if (!validateField(message, "a", Json_de::value_t::number_float)) return ;
-            //     if (!validateField(message, "b", Json_de::value_t::number_float)) return ;
-            //     if (!validateField(message, "r", Json_de::value_t::number_unsigned)) return ;
+            case TYPE_AndruavMessage_AI_Recognition_ACTION:
+            {
                 
-            //     m_trackerMain.startTracking(message["a"].get<float>(),
-            //                                 message["b"].get<float>(), 
-            //                                 message["r"].get<float>());
-            // }
+                if (!cmd.contains("a") || !cmd["a"].is_number_integer()) return ;
+
+                switch (cmd["a"].get<int>())
+                {
+
+                    case TrackingTarget_ACTION_AI_Recognition_SEARCH:
+                    {
+                    
+                        std::cout << "TrackingTarget_ACTION_AI_Recognition_SEARCH" << std::endl;
+                        m_trackerMain.startTrackingObjects();
+                    }
+                    break;
+                    
+                    case TrackingTarget_ACTION_AI_Recognition_STOP:
+                        std::cout << "TrackingTarget_ACTION_AI_Recognition_STOP" << std::endl;
+                        m_trackerMain.stopTracking();
+                    break;
+
+                    case TrackingTarget_ACTION_AI_Recognition_PAUSE:
+                        std::cout << "TrackingTarget_ACTION_AI_Recognition_PAUSE" << std::endl;
+                        m_trackerMain.pauseTracking();
+                    break;
+                }
+            }
             break;
 
         }

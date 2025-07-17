@@ -2,7 +2,10 @@
 #define YOLO_AI_MAIN_H
 
 
+#include <thread>         // std::thread
+
 #include "../de_common/de_common_callback.hpp"
+#include "yolo_ai_facade.hpp"
 #include "yolo_ai.hpp"
 
 
@@ -14,7 +17,7 @@ namespace de
 {
 namespace yolo_ai
 {
- class CYOLOAI_Main: public de::comm::CCommon_Callback
+ class CYOLOAI_Main: public de::comm::CCommon_Callback, de::yolo_ai::CCallBack_YOLOAI
     {
 
         public:
@@ -58,12 +61,25 @@ namespace yolo_ai
             void startYolo();
             void stopYolo();
 
+        
 
+        public:
+            void startTrackingObjects();
+            void stopTracking();
+            void pauseTracking();
+
+        public:
+            //CCallBack_Tracker
+            void onTrack (const float& x, const float& y, const float& width, const float& height, const uint16_t camera_orientation, const bool camera_forward) override ;
+            void onTrackStatusChanged (const int& track) override ;
+
+        
         private:
             
             
             bool m_exit_thread;
 
+            std::thread m_threadSenderID;
 
             std::string m_hef_model_path;
             std::string m_source_video_device;
@@ -71,6 +87,7 @@ namespace yolo_ai
 
 
             de::yolo_ai::CYOLOAI& m_yolo_ai = de::yolo_ai::CYOLOAI::getInstance();
+            de::yolo_ai::CYOLOAI_Facade& m_trackerFacade = de::yolo_ai::CYOLOAI_Facade::getInstance();
     };
 
 }
