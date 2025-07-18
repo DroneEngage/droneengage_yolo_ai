@@ -79,7 +79,7 @@ bool CYOLOAI_Main::init()
 bool CYOLOAI_Main::uninit()
 {
     m_yolo_ai.stop();
-    if (m_threadSenderID.joinable())
+    if(m_threadSenderID.joinable())
     {
         m_threadSenderID.join();
     }
@@ -130,11 +130,6 @@ void CYOLOAI_Main::onTrackStatusChanged (const int& status)
  void CYOLOAI_Main::startTrackingObjects()
  {
     m_yolo_ai.detect();
-
-    m_trackerFacade.sendTrackingTargetStatus (
-        std::string(""),
-        TrackingTarget_STATUS_AI_Recognition_ENABLED
-    );
  }
 
  void CYOLOAI_Main::stopTracking()

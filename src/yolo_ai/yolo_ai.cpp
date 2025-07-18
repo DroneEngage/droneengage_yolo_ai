@@ -93,8 +93,8 @@ void CYOLOAI::pause()
 
 void CYOLOAI::stop()
 {
-    if (!m_exit_thread) return ; 
-    m_exit_thread = false;
+    if (m_exit_thread) return ; 
+    m_exit_thread = true;
     
     if (m_callback_yolo_ai != nullptr)
     {
@@ -213,7 +213,7 @@ int CYOLOAI::run() {
         cap.release();
         return 1;
     }
-    std::cout << _SUCCESS_CONSOLE_BOLD_TEXT_<< "Successfully opened virtual video device: " << _LOG_CONSOLE_BOLD_TEXT << m_output_video_device << std::endl;
+    std::cout << _SUCCESS_CONSOLE_BOLD_TEXT_<< "Successfully opened virtual video device: " << _LOG_CONSOLE_BOLD_TEXT << m_output_video_device << _NORMAL_CONSOLE_TEXT_ << std::endl;
 
     struct v4l2_format fmt = {0};
     fmt.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
@@ -234,7 +234,6 @@ int CYOLOAI::run() {
             m_output_video_device.c_str(), fmt.fmt.pix.width, fmt.fmt.pix.height);
 
     // Pre-allocate Mats outside the loop to avoid reallocations.
-    // `cv::Mat::create` can be used to ensure correct size and type without reallocating
     // if the size is already correct. This avoids repeated memory allocation/deallocation.
     cv::Mat original_bgr_frame;
     cv::Mat nn_input_rgb_frame(nnHeight, nnWidth, CV_8UC3); // Directly allocate for RGB to avoid an intermediate BGR.
@@ -245,8 +244,8 @@ int CYOLOAI::run() {
     // Pre-calculate the scale factors for converting normalized coordinates
     const float scale_x = static_cast<float>(original_frame_width);
     const float scale_y = static_cast<float>(original_frame_height);
-
-    while (true) {
+    m_exit_thread = false;
+    while (!m_exit_thread) {
         // Use `cap.read()` for slightly better performance than `operator>>` in some cases
         // as it avoids temporary `Mat` construction by reading directly into `original_bgr_frame`.
         cap.read(original_bgr_frame);
@@ -267,8 +266,6 @@ int CYOLOAI::run() {
 
         #ifndef TEST_MODE_NO_HAILO_LINK
         // --- Hailo Inference ---
-        // Ensure input_frame_size matches nn_input_rgb_frame.total() * nn_input_rgb_frame.elemSize()
-        // If `get_frame_size()` from HailoRT is reliable, stick to that.
         auto status = bindings.input(input_name)->set_buffer(MemoryView(nn_input_rgb_frame.data, input_frame_size));
         if (status != HAILO_SUCCESS) {
             std::cerr << _ERROR_CONSOLE_BOLD_TEXT_ << "Failed to set input memory buffer: " << status << _NORMAL_CONSOLE_TEXT_ << std::endl;
@@ -282,10 +279,6 @@ int CYOLOAI::run() {
 
         for (const auto& output_name_str : infer_model->get_output_names()) {
             size_t output_size = infer_model->output(output_name_str)->get_frame_size();
-            // Use `std::vector<uint8_t>` or `std::unique_ptr<uint8_t[]>` for automatic memory management.
-            // For example: `std::vector<uint8_t> output_buffer(output_size);`
-            // Then `output_buffer.data()` can be used.
-            // Keeping `malloc` for now to stick closer to original, but this is a prime area for improvement.
             uint8_t* output_buffer = static_cast<uint8_t*>(malloc(output_size));
             if (!output_buffer) {
                 std::cerr << _ERROR_CONSOLE_BOLD_TEXT_ << "Could not allocate output buffer for " << output_name_str << _NORMAL_CONSOLE_TEXT_ << std::endl;
@@ -425,7 +418,6 @@ int CYOLOAI::run() {
 
         // --- Convert original_bgr_frame (with drawings) to YUV420p for V4L2 output ---
         // Ensure yuv_output_frame has the correct dimensions and type before conversion.
-        // `cv::cvtColor` handles reallocation if sizes don't match, but pre-allocation is better.
         cv::cvtColor(original_bgr_frame, yuv_output_frame, cv::COLOR_BGR2YUV_I420);
 
         // --- Write YUV420p data to virtual device ---
@@ -447,29 +439,49 @@ int CYOLOAI::run() {
             }
         } else {
             std::cerr << _ERROR_CONSOLE_BOLD_TEXT_ << "Error: YUV output frame is not continuous or has unexpected size. Cannot write to V4L2 device." << _NORMAL_CONSOLE_TEXT_ << std::endl;
-            fprintf(stderr, "Debug: yuv_output_frame.total() * elemSize() = %zu, expected output_yuv_frame_size = %zu\n",
+            #ifdef DDEBUG
+                fprintf(stderr, "Debug: yuv_output_frame.total() * elemSize() = %zu, expected output_yuv_frame_size = %zu\n",
                     yuv_output_frame.total() * yuv_output_frame.elemSize(), output_yuv_frame_size);
-            fprintf(stderr, "Debug: yuv_output_frame continuous: %d, dims: %dx%d, channels: %d, depth: %d, elemSize: %zu\n",
+                fprintf(stderr, "Debug: yuv_output_frame continuous: %d, dims: %dx%d, channels: %d, depth: %d, elemSize: %zu\n",
                     yuv_output_frame.isContinuous(), yuv_output_frame.cols, yuv_output_frame.rows, yuv_output_frame.channels(), yuv_output_frame.depth(), yuv_output_frame.elemSize());
+            #endif
             break; // Fatal error, exit loop
         }
         
-        #ifndef TEST_MODE_NO_HAILO_LINK
-        // Free output buffers for the next iteration
-        // for (auto& tensor : output_tensors) {
-        //     free(tensor.data); // This assumes malloc was used.
-        //                        // If `std::vector<uint8_t>` was used, nothing explicit is needed here.
-        // }
-        #endif
-
     } // End of while(true) loop
 
     // --- Cleanup ---
+    // 1. Close V4L2 output device (C-style file descriptor)
+    #ifdef DDEBUG
     fprintf(stderr, "Exiting application...\n");
+    #endif
+
     if (video_fd >= 0) {
         close(video_fd);
+        video_fd = -1; // Mark as closed
+        #ifdef DDEBUG
         fprintf(stderr, "Closed virtual video device %s\n", m_output_video_device.c_str());
+        #endif
     }
-    cap.release();
+    
+    // 2. Release OpenCV camera capture
+    if (cap.isOpened()) { // Check if it was successfully opened
+        cap.release();
+        #ifdef DDEBUG
+        fprintf(stderr, "Released OpenCV camera capture %s\n", m_source_video_device.c_str());
+        #endif
+    }
+
+    #ifdef DDEBUG
+    // 3. HailoRT resources (managed by smart pointers, mostly self-cleaning)
+    // The unique_ptr (vdevice) and shared_ptr (infer_model, configured_infer_model)
+    // will automatically call their destructors when they go out of scope at the end of this function.
+    // This is the beauty of RAII!
+    fprintf(stderr, "HailoRT resources (vdevice, infer_model, configured_infer_model, bindings) are being deallocated by smart pointers.\n");
+
+    fprintf(stderr, "DEBUG: Exiting cleanup phase of CYOLOAI::run().\n");
+
+    std::cout << _SUCCESS_CONSOLE_BOLD_TEXT_ << "Successfully exit CYOLOAI::run()." << _NORMAL_CONSOLE_TEXT_ << std::endl;
+    #endif
     return 0;
 }
