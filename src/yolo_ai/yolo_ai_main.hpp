@@ -74,6 +74,13 @@ namespace yolo_ai
             void onTrackStatusChanged (const int& track) override ;
 
         
+        public:
+
+            inline const std::vector<std::string> getTrackingObjectsList()
+            {
+                return m_class_names;
+            }
+        
         private:
             
             
@@ -84,7 +91,7 @@ namespace yolo_ai
             std::string m_hef_model_path;
             std::string m_source_video_device;
             std::string m_output_virtual_video_path;
-
+            std::vector<std::string> m_class_names;
 
             de::yolo_ai::CYOLOAI& m_yolo_ai = de::yolo_ai::CYOLOAI::getInstance();
             de::yolo_ai::CYOLOAI_Facade& m_trackerFacade = de::yolo_ai::CYOLOAI_Facade::getInstance();

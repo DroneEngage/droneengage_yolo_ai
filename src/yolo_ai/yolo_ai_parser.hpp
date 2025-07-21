@@ -3,6 +3,7 @@
 
 
 #include "./yolo_ai_main.hpp"
+#include "./yolo_ai_facade.hpp"
 
 #include "../helpers/json_nlohmann.hpp"
 
@@ -43,8 +44,8 @@ namespace yolo_ai
             }
 
         private:
-            de::yolo_ai::CYOLOAI_Main&  m_trackerMain = de::yolo_ai::CYOLOAI_Main::getInstance();
-
+            de::yolo_ai::CYOLOAI_Main&  m_tracker_main = de::yolo_ai::CYOLOAI_Main::getInstance();
+            de::yolo_ai::CYOLOAI_Facade& m_tracker_facade = de::yolo_ai::CYOLOAI_Facade::getInstance();
     };
 }
 }

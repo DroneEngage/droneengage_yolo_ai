@@ -41,19 +41,26 @@ void CYOLOAI_Parser::parseMessage (Json_de &andruav_message, const char * full_m
                     case TrackingTarget_ACTION_AI_Recognition_SEARCH:
                     {
                     
+                        if (!cmd.contains("i") || !cmd["i"].is_array()) return ; // bad command parameters
+                        Json_de class_indicies = cmd["i"];
                         std::cout << "TrackingTarget_ACTION_AI_Recognition_SEARCH" << std::endl;
-                        m_trackerMain.startTrackingObjects();
+                        m_tracker_main.startTrackingObjects();
                     }
                     break;
                     
                     case TrackingTarget_ACTION_AI_Recognition_STOP:
                         std::cout << "TrackingTarget_ACTION_AI_Recognition_STOP" << std::endl;
-                        m_trackerMain.stopTracking();
+                        m_tracker_main.stopTracking();
                     break;
 
                     case TrackingTarget_ACTION_AI_Recognition_PAUSE:
                         std::cout << "TrackingTarget_ACTION_AI_Recognition_PAUSE" << std::endl;
-                        m_trackerMain.pauseTracking();
+                        m_tracker_main.pauseTracking();
+                    break;
+
+                    case TrackingTarget_ACTION_AI_Recognition_CLASS_LIST:
+                        std::cout << "TrackingTarget_ACTION_AI_Recognition_CLASS_LIST" << std::endl;
+                        m_tracker_facade.sendTrackingClassesList(std::string(""));
                     break;
                 }
             }

@@ -22,8 +22,8 @@
 using Json_de = nlohmann::json;
 
 #define MESSAGE_FILTER {TYPE_AndruavMessage_AI_Recognition_ACTION,\
-                        TYPE_AndruavMessage_AI_Recognition_STATUS,\
-                        TYPE_AndruavMessage_AI_Recognition_Objects}
+                        TYPE_AndruavMessage_AI_Recognition_STATUS\
+                        }
 
 // This is a timestamp used as instance unique number. if changed then communicator module knows module has restarted.
 std::time_t instance_time_stamp;

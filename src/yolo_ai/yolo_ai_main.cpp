@@ -55,11 +55,11 @@ bool CYOLOAI_Main::init()
         exit(1);
     }
     
-    std::vector<std::string> class_names;
+    m_class_names.clear();
 
     for (const auto& element : jsonConfig["class_names"]) {
             if (element.is_string()) {
-                class_names.push_back(element.get<std::string>());
+                m_class_names.push_back(element.get<std::string>());
             } else {
                 std::cout << "Warning: Non-string element found in classNames array. Skipping." << std::endl;
             }
@@ -67,7 +67,7 @@ bool CYOLOAI_Main::init()
     
     std::cout << _SUCCESS_CONSOLE_BOLD_TEXT_ << "class_names: " << _INFO_CONSOLE_TEXT << "filled." << _NORMAL_CONSOLE_TEXT_ << std::endl;
     
-    m_yolo_ai.init(source_video_device, model_path, output_video_device, class_names, this);
+    m_yolo_ai.init(source_video_device, model_path, output_video_device, m_class_names, this);
 
 
     m_threadSenderID = std::thread {[&](){ m_yolo_ai.run();}};

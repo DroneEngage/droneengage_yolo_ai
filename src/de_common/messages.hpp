@@ -206,7 +206,7 @@
 
 #define TYPE_AndruavMessage_AI_Recognition_ACTION       1076
 #define TYPE_AndruavMessage_AI_Recognition_STATUS       1077
-#define TYPE_AndruavMessage_AI_Recognition_Objects      1078
+
 // Binary Messages 
 
 //deprecated telemetry technology
@@ -416,13 +416,15 @@
 
 
 // TYPE_AndruavMessage_TrackingTarget_ACTION
-#define TrackingTarget_ACTION_AI_Recognition_POINT    0
-#define TrackingTarget_ACTION_AI_Recognition_SEARCH   1
-#define TrackingTarget_ACTION_AI_Recognition_STOP     2
-#define TrackingTarget_ACTION_AI_Recognition_PAUSE    3
+#define TrackingTarget_ACTION_AI_Recognition_POINT          0
+#define TrackingTarget_ACTION_AI_Recognition_SEARCH         1
+#define TrackingTarget_ACTION_AI_Recognition_STOP           2
+#define TrackingTarget_ACTION_AI_Recognition_PAUSE          3
+#define TrackingTarget_ACTION_AI_Recognition_CLASS_LIST     4
 
 // TYPE_AndruavMessage_AI_Recognition_STATUS
-#define TrackingTarget_STATUS_AI_Recognition_LOST     0
-#define TrackingTarget_STATUS_AI_Recognition_DETECTED 1
-#define TrackingTarget_STATUS_AI_Recognition_ENABLED  2
-#define TrackingTarget_STATUS_AI_Recognition_STOPPED  3
+#define TrackingTarget_STATUS_AI_Recognition_LOST           0
+#define TrackingTarget_STATUS_AI_Recognition_DETECTED       1
+#define TrackingTarget_STATUS_AI_Recognition_ENABLED        2
+#define TrackingTarget_STATUS_AI_Recognition_STOPPED        3
+#define TrackingTarget_STATUS_AI_Recognition_CLASS_LIST     4

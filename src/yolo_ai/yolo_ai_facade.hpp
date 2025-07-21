@@ -49,12 +49,14 @@ namespace yolo_ai
             };
                 
 
-       public:
+        public:
            
             void sendTrackingTargetsLocation(const std::string& target_party_id, const Json_de targets_location) const;
+            void sendTrackingClassesList(const std::string& target_party_id);
             void sendTrackingTargetStatus(const std::string& target_party_id, const int status) const;
         
-        protected:
+        
+        private:
 
             
     };
