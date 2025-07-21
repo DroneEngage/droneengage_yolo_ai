@@ -64,7 +64,7 @@ namespace yolo_ai
         
 
         public:
-            void startTrackingObjects();
+            void startTrackingObjects(const Json_de& allowed_class_indices);
             void stopTracking();
             void pauseTracking();
 

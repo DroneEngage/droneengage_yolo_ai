@@ -127,8 +127,9 @@ void CYOLOAI_Main::onTrackStatusChanged (const int& status)
     #endif
 }
     
- void CYOLOAI_Main::startTrackingObjects()
+ void CYOLOAI_Main::startTrackingObjects(const Json_de& allowed_class_indices)
  {
+    m_yolo_ai.loadAllowedClassIndices(allowed_class_indices);
     m_yolo_ai.detect();
  }
 

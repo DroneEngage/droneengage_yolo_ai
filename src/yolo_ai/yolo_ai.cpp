@@ -102,6 +102,22 @@ void CYOLOAI::stop()
     }
 }
 
+
+void CYOLOAI::loadAllowedClassIndices(const Json_de& json_array) {
+    m_allowed_class_indices.clear(); // Clear any previous entries
+    if (json_array.is_array()) {
+        for (const auto& item : json_array) {
+            if (item.is_number_integer()) {
+                m_allowed_class_indices.insert(item.get<size_t>());
+            } else {
+                std::cerr << "Warning: Non-integer value found in class index list. Skipping." << std::endl;
+            }
+        }
+    } else {
+        std::cerr << "Error: Provided JSON for class indices is not an array." << std::endl;
+    }
+}
+
 int CYOLOAI::run() {
     using namespace std::literals::chrono_literals;
 
@@ -360,12 +376,29 @@ int CYOLOAI::run() {
             size_t current_idx = 0; // Better name than `idx` to avoid conflict with loop variable
 
             for (size_t classIdx = 0; classIdx < numClasses; ++classIdx) {
+
+                // Check if this classIdx is in our allowed list
+                if (!m_allowed_class_indices.empty() && m_allowed_class_indices.find(classIdx) == m_allowed_class_indices.end()) {
+                    // If m_allowed_class_indices is not empty AND the current classIdx is NOT found in it,
+                    // then skip this class entirely.
+                    
+                    // We still need to advance current_idx past the numBoxes for this class
+                    if (current_idx * sizeof(float) >= nms_output_byte_size) { 
+                        std::cerr << "Error: NMS output parsing index out of bounds (class count - " << classIdx << "). Not enough data for numBoxes when skipping." << std::endl;
+                        break; 
+                    }
+                    size_t numBoxesToSkip = static_cast<size_t>(raw[current_idx++]);
+                    current_idx += numBoxesToSkip * 5; // 5 floats per box (ymin, xmin, ymax, xmax, confidence)
+                    continue; // Move to the next class
+                }
+
                 // Ensure we don't read past allocated memory for `raw`
                 // CORRECTED: Use nms_output_byte_size
                 if (current_idx * sizeof(float) >= nms_output_byte_size) { 
                     std::cerr << "Error: NMS output parsing index out of bounds (class count - " << classIdx << "). Not enough data for numBoxes." << std::endl;
                     break; 
                 }
+                
                 size_t numBoxes = static_cast<size_t>(raw[current_idx++]);
 
                 for (size_t i = 0; i < numBoxes; ++i) {
@@ -400,7 +433,7 @@ int CYOLOAI::run() {
                         
                         cv::rectangle(original_bgr_frame, cv::Point(x1, y1), cv::Point(x2, y2), color, 2);
                         
-                        }
+                    }
                     current_idx += 5; // Move to the next box
                 }
             }

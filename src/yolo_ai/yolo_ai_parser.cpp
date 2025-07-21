@@ -42,9 +42,10 @@ void CYOLOAI_Parser::parseMessage (Json_de &andruav_message, const char * full_m
                     {
                     
                         if (!cmd.contains("i") || !cmd["i"].is_array()) return ; // bad command parameters
-                        Json_de class_indicies = cmd["i"];
+                        const Json_de& class_indicies = cmd["i"];
+                        
                         std::cout << "TrackingTarget_ACTION_AI_Recognition_SEARCH" << std::endl;
-                        m_tracker_main.startTrackingObjects();
+                        m_tracker_main.startTrackingObjects(class_indicies);
                     }
                     break;
                     
