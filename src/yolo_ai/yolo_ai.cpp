@@ -1,3 +1,4 @@
+#include <chrono> // For high-resolution timing
 #include <iostream>
 #include <signal.h>
 #include <vector>
@@ -188,37 +189,47 @@ int CYOLOAI::run() {
 #endif
 
     // --- OpenCV Camera Initialization ---
-    cv::VideoCapture cap;
-    // Prefer `std::string::c_str()` for C-style API compatibility in `cap.open`
-    if (!cap.open(m_source_video_device.c_str(), cv::CAP_V4L2)) {
+    cv::VideoCapture video_capture;
+    /**
+     * without an explicit backend. 
+     *  When you don't specify cv::CAP_V4L2 (or cv::CAP_DSHOW on Windows, etc.),
+     *  OpenCV attempts to auto-detect the camera and the best API to use. 
+     * This auto-detection process can be time-consuming and often defaults to a less efficient or more generic backend
+     *  (like GStreamer if it's available and configured,
+     *  or a generic CAP_ANY interface) that adds more layers of abstraction and overhead.
+     */
+    if (!video_capture.open(m_source_video_device.c_str(), cv::CAP_V4L2)) {
         std::cerr << _ERROR_CONSOLE_BOLD_TEXT_ << "Error: Failed to open camera " << m_source_video_device << " with V4L2 backend" << _NORMAL_CONSOLE_TEXT_ << std::endl;
         return 1;
     }
 
     // Set camera properties once after opening.
     // Error checking for `set` calls is good practice, though not strictly required if non-critical.
-    cap.set(cv::CAP_PROP_FPS, 30);
-    cap.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
+    video_capture.set(cv::CAP_PROP_FPS, 30);
+    video_capture.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
 
     // Get the actual full resolution from the camera
-    int original_frame_width = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_WIDTH));
-    int original_frame_height = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_HEIGHT));
-    double actual_fps = cap.get(cv::CAP_PROP_FPS);
-
+    int original_frame_width = static_cast<int>(video_capture.get(cv::CAP_PROP_FRAME_WIDTH));
+    int original_frame_height = static_cast<int>(video_capture.get(cv::CAP_PROP_FRAME_HEIGHT));
+    double actual_fps = video_capture.get(cv::CAP_PROP_FPS);
+    UNUSED(actual_fps);
     if (original_frame_width == 0 || original_frame_height == 0) {
         std::cerr << _ERROR_CONSOLE_BOLD_TEXT_ << "Error: Failed to get camera resolution from " << m_source_video_device << _NORMAL_CONSOLE_TEXT_ << std::endl;
-        cap.release();
+        video_capture.release();
         return 1;
     }
 
-    fprintf(stderr, "Original camera capture resolution: %dx%d @ %.1f FPS\n", original_frame_width, original_frame_height, actual_fps);
-    
     if (original_frame_width < nnWidth || original_frame_height < nnHeight) {
-        fprintf(stderr, "Warning: Original camera resolution (%dx%d) is smaller than AI network input (%dx%d). AI input will be upscaled.\n",
-                original_frame_width, original_frame_height, nnWidth, nnHeight);
+        // fprintf(stderr, "Warning: Original camera resolution (%dx%d) is smaller than AI network input (%dx%d). AI input will be upscaled.\n",
+        //         original_frame_width, original_frame_height, nnWidth, nnHeight);
+        std::cerr << _ERROR_CONSOLE_BOLD_TEXT_ << "Info: Original camera resolution (" << _INFO_CONSOLE_BOLD_TEXT << original_frame_width << _LOG_CONSOLE_BOLD_TEXT << "x" << _INFO_CONSOLE_BOLD_TEXT << original_frame_height << _ERROR_CONSOLE_BOLD_TEXT_ 
+            << ") is smaller than AI network input (" << _INFO_CONSOLE_BOLD_TEXT << nnWidth << _LOG_CONSOLE_BOLD_TEXT << "x" << _INFO_CONSOLE_BOLD_TEXT << nnHeight << "). AI input will be upscaled. " <<  _NORMAL_CONSOLE_TEXT_ << std::endl;
     } else if (original_frame_width != nnWidth || original_frame_height != nnHeight) {
-         fprintf(stderr, "Info: Original camera resolution (%dx%d) differs from AI network input (%dx%d). Frame will be resized for AI.\n",
-                original_frame_width, original_frame_height, nnWidth, nnHeight);
+        //  fprintf(stderr, "Info: Original camera resolution (%dx%d) differs from AI network input (%dx%d). Frame will be resized for AI.\n",
+        //         original_frame_width, original_frame_height, nnWidth, nnHeight);
+        std::cerr << _ERROR_CONSOLE_BOLD_TEXT_ << "Info: Original camera resolution (" << _INFO_CONSOLE_BOLD_TEXT << original_frame_width << _LOG_CONSOLE_BOLD_TEXT << "x" << _INFO_CONSOLE_BOLD_TEXT << original_frame_height << _ERROR_CONSOLE_BOLD_TEXT_ 
+            << ") differs from AI network input (" << _INFO_CONSOLE_BOLD_TEXT << nnWidth << _LOG_CONSOLE_BOLD_TEXT << "x" << _INFO_CONSOLE_BOLD_TEXT << nnHeight << "). Frame will be resized for AI. " <<  _NORMAL_CONSOLE_TEXT_ << std::endl;
+            
     }
 
     // --- V4L2 Output Device Initialization ---
@@ -226,7 +237,7 @@ int CYOLOAI::run() {
     video_fd = open(m_output_video_device.c_str(), O_WRONLY | O_NONBLOCK);
     if (video_fd < 0) {
         std::cout << _ERROR_CONSOLE_BOLD_TEXT_ << "Failed to open virtual video device " << m_output_video_device << ": " << strerror(errno) << _NORMAL_CONSOLE_TEXT_ << std::endl;
-        cap.release();
+        video_capture.release();
         return 1;
     }
     std::cout << _SUCCESS_CONSOLE_BOLD_TEXT_<< "Successfully opened virtual video device: " << _LOG_CONSOLE_BOLD_TEXT << m_output_video_device << _NORMAL_CONSOLE_TEXT_ << std::endl;
@@ -243,11 +254,11 @@ int CYOLOAI::run() {
     if (de::yolo_ai::CVideo::xioctl(video_fd, VIDIOC_S_FMT, &fmt) < 0) {
         std::cout << _ERROR_CONSOLE_BOLD_TEXT_ << "Failed to set video format on " << m_output_video_device << ": " << strerror(errno) << _NORMAL_CONSOLE_TEXT_ << std::endl;
         close(video_fd);
-        cap.release();
+        video_capture.release();
         return 1;
     }
-    fprintf(stderr, "Successfully set format for V4L2 output %s: %dx%d, pixformat YUV420\n",
-            m_output_video_device.c_str(), fmt.fmt.pix.width, fmt.fmt.pix.height);
+    
+    std::cout << _SUCCESS_CONSOLE_BOLD_TEXT_<< "Successfully set format for " << m_output_video_device << ":" << _INFO_CONSOLE_BOLD_TEXT << fmt.fmt.pix.width << _LOG_CONSOLE_BOLD_TEXT << "x" << _INFO_CONSOLE_BOLD_TEXT << fmt.fmt.pix.height << _LOG_CONSOLE_BOLD_TEXT << " pixformat YUV420" << _NORMAL_CONSOLE_TEXT_ <<  std::endl;
 
     // Pre-allocate Mats outside the loop to avoid reallocations.
     // if the size is already correct. This avoids repeated memory allocation/deallocation.
@@ -260,12 +271,27 @@ int CYOLOAI::run() {
     // Pre-calculate the scale factors for converting normalized coordinates
     const float scale_x = static_cast<float>(original_frame_width);
     const float scale_y = static_cast<float>(original_frame_height);
+
+    // Outside the loop, after infer_model is configured:
+    std::vector<std::vector<uint8_t>> pre_allocated_output_buffers;
+    pre_allocated_output_buffers.reserve(infer_model->get_output_names().size());
+    // Populate pre_allocated_output_buffers with correctly sized buffers
+    for (const auto& output_name_str : infer_model->get_output_names()) {
+        size_t output_size = infer_model->output(output_name_str)->get_frame_size();
+        pre_allocated_output_buffers.emplace_back(output_size); // Allocates a vector of `output_size` bytes
+    }
+
     m_exit_thread = false;
+
+    uint64_t frame_counter = 0;
+
+
     while (!m_exit_thread) {
-        // Use `cap.read()` for slightly better performance than `operator>>` in some cases
+        auto start_time = std::chrono::high_resolution_clock::now();
+        
+        // Use `video_capture.read()` for slightly better performance than `operator>>` in some cases
         // as it avoids temporary `Mat` construction by reading directly into `original_bgr_frame`.
-        cap.read(original_bgr_frame);
-        if (!cap.read(original_bgr_frame) || original_bgr_frame.empty()) {
+        if (!video_capture.read(original_bgr_frame) || original_bgr_frame.empty()) {
             std::cerr << _ERROR_CONSOLE_BOLD_TEXT_ << "Failed to capture frame or end of stream." << _NORMAL_CONSOLE_TEXT_ << std::endl;
             break;
         }
@@ -278,8 +304,7 @@ int CYOLOAI::run() {
         // It's more efficient to resize the BGR image first and then convert to RGB,
         // rather than converting the large image to RGB and then resizing.
         cv::resize(original_bgr_frame, nn_input_rgb_frame, cv::Size(nnWidth, nnHeight));
-        cv::cvtColor(nn_input_rgb_frame, nn_input_rgb_frame, cv::COLOR_BGR2RGB); // Convert in-place if possible, or use different destination Mat
-
+        
         #ifndef TEST_MODE_NO_HAILO_LINK
         // --- Hailo Inference ---
         auto status = bindings.input(input_name)->set_buffer(MemoryView(nn_input_rgb_frame.data, input_frame_size));
@@ -289,37 +314,26 @@ int CYOLOAI::run() {
         }
 
         // Allocate output buffers dynamically, but clean them up in a structured way (e.g., using RAII or smart pointers).
-        // For simplicity and matching original logic, keeping `malloc`/`free` but emphasizing RAII for robustness.
         std::vector<OutTensor> output_tensors;
         output_tensors.reserve(infer_model->get_output_names().size()); // Pre-allocate vector capacity
 
-        for (const auto& output_name_str : infer_model->get_output_names()) {
-            size_t output_size = infer_model->output(output_name_str)->get_frame_size();
-            uint8_t* output_buffer = static_cast<uint8_t*>(malloc(output_size));
-            if (!output_buffer) {
-                std::cerr << _ERROR_CONSOLE_BOLD_TEXT_ << "Could not allocate output buffer for " << output_name_str << _NORMAL_CONSOLE_TEXT_ << std::endl;
-                // Free previously allocated buffers before returning
-                for (auto& tensor : output_tensors) {
-                    free(tensor.data); // Assuming `data` is from malloc
-                }
-                return HAILO_OUT_OF_HOST_MEMORY;
-            }
+        for (size_t i = 0; i < infer_model->get_output_names().size(); ++i) {
+            const auto& output_name_str = infer_model->get_output_names()[i];
+            // Get the pointer to the data of the pre-allocated vector
+            uint8_t* output_buffer_ptr = pre_allocated_output_buffers[i].data();
+            size_t output_size = pre_allocated_output_buffers[i].size(); // Get the size from the pre-allocated vector
 
-            status = bindings.output(output_name_str)->set_buffer(MemoryView(output_buffer, output_size));
+            status = bindings.output(output_name_str)->set_buffer(MemoryView(output_buffer_ptr, output_size));
             if (status != HAILO_SUCCESS) {
-                free(output_buffer); // Free the current buffer
                 std::cerr << _ERROR_CONSOLE_BOLD_TEXT_ << "Failed to set output buffer for " << output_name_str << ": " << status << _NORMAL_CONSOLE_TEXT_ << std::endl;
-                for (auto& tensor : output_tensors) {
-                    free(tensor.data);
-                }
-                return status;
+                return status; // Exit function on critical setup error
             }
 
             const auto quant = infer_model->output(output_name_str)->get_quant_infos();
             const auto shape = infer_model->output(output_name_str)->shape();
             const auto format = infer_model->output(output_name_str)->format();
             // Store the raw pointer and its associated metadata. Ownership is still with this loop.
-            output_tensors.emplace_back(output_buffer, output_name_str, quant[0], shape, format);
+            output_tensors.emplace_back(output_buffer_ptr, output_name_str, quant[0], shape, format);
         }
         
         status = configured_infer_model->wait_for_async_ready(1s);
@@ -363,15 +377,8 @@ int CYOLOAI::run() {
             const OutTensor& out = output_tensors[0]; // Assuming first output is NMS
             const float* raw = reinterpret_cast<const float*>(out.data); // Use reinterpret_cast for pointer conversion
             
-            // CORRECTED: Get output_size for the specific 'out' tensor
-            // This is the size of the buffer that 'out.data' points to.
-            // You might need to get this from the infer_model->output(out.name)->get_frame_size()
-            // or if OutTensor itself stores its size. Assuming out.data points to a buffer
-            // that matches the frame size of the first output model.
             size_t nms_output_byte_size = infer_model->output(out.name)->get_frame_size(); 
-            // Or, if OutTensor struct stored its allocated size directly, use that:
-            // size_t nms_output_byte_size = out.allocated_size; // if you add this member to OutTensor
-
+            
             size_t numClasses = static_cast<size_t>(out.shape.height); // As per original comment
             size_t current_idx = 0; // Better name than `idx` to avoid conflict with loop variable
 
@@ -393,12 +400,11 @@ int CYOLOAI::run() {
                 }
 
                 // Ensure we don't read past allocated memory for `raw`
-                // CORRECTED: Use nms_output_byte_size
                 if (current_idx * sizeof(float) >= nms_output_byte_size) { 
                     std::cerr << "Error: NMS output parsing index out of bounds (class count - " << classIdx << "). Not enough data for numBoxes." << std::endl;
                     break; 
                 }
-                
+
                 size_t numBoxes = static_cast<size_t>(raw[current_idx++]);
 
                 for (size_t i = 0; i < numBoxes; ++i) {
@@ -475,6 +481,18 @@ int CYOLOAI::run() {
             #endif
             break; // Fatal error, exit loop
         }
+
+        auto end_time = std::chrono::high_resolution_clock::now();
+        auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+        
+        #ifdef DDEBUG
+        if (frame_counter % 10 == 0)
+        {
+            std::cout << _INFO_CONSOLE_BOLD_TEXT << "Elapsed: " << _LOG_CONSOLE_BOLD_TEXT << elapsed_time.count() << "ms" << std::endl;
+        }
+        #endif
+
+        ++frame_counter;
         
     } // End of while(true) loop
 
@@ -493,8 +511,8 @@ int CYOLOAI::run() {
     }
     
     // 2. Release OpenCV camera capture
-    if (cap.isOpened()) { // Check if it was successfully opened
-        cap.release();
+    if (video_capture.isOpened()) { // Check if it was successfully opened
+        video_capture.release();
         #ifdef DDEBUG
         fprintf(stderr, "Released OpenCV camera capture %s\n", m_source_video_device.c_str());
         #endif

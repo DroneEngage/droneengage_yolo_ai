@@ -83,6 +83,7 @@ class CCallBack_YOLOAI
             
             bool m_exit_thread;
             bool m_is_AI_yolo_active_initial = false;
+            bool m_object_found = false;
 
             std::string m_source_video_device;
             std::string m_output_video_device;
