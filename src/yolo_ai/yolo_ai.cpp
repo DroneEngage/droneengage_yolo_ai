@@ -389,23 +389,18 @@ int CYOLOAI::run() {
                         int x2 = static_cast<int>(xmax_norm * scale_x);
                         int y2 = static_cast<int>(ymax_norm * scale_y);
 
-                        cv::rectangle(original_bgr_frame, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(0, 255, 0), 2);
-                        
-                        std::string label_text;
-                        if (classIdx < m_class_names.size()){
-                             label_text = cv::format("%s: %.2f", m_class_names[classIdx].c_str(), confidence);
+                        cv::Scalar color;
+                        if (confidence > 0.85) {
+                            color = cv::Scalar(0, 255, 0); // Green (B, G, R)
+                        } else if (confidence > 0.75) {
+                            color = cv::Scalar(0, 255, 255); // Yellow (B, G, R)
                         } else {
-                             label_text = cv::format("Class %zu: %.2f", classIdx, confidence);
+                            color = cv::Scalar(0, 0, 255); // Red (B, G, R)
                         }
-
-                        int baseline = 0;
-                        cv::Size text_size = cv::getTextSize(label_text, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseline);
                         
-                        cv::rectangle(original_bgr_frame, cv::Point(x1, y1 - text_size.height - 5), 
-                                     cv::Point(x1 + text_size.width, y1), cv::Scalar(0, 255, 0), cv::FILLED);
-                        cv::putText(original_bgr_frame, label_text, cv::Point(x1, y1 - 5), 
-                                   cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0), 1);
-                    }
+                        cv::rectangle(original_bgr_frame, cv::Point(x1, y1), cv::Point(x2, y2), color, 2);
+                        
+                        }
                     current_idx += 5; // Move to the next box
                 }
             }
