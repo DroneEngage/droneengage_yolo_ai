@@ -223,7 +223,7 @@ int CYOLOAI::run() {
         // fprintf(stderr, "Warning: Original camera resolution (%dx%d) is smaller than AI network input (%dx%d). AI input will be upscaled.\n",
         //         original_frame_width, original_frame_height, nnWidth, nnHeight);
         std::cerr << _ERROR_CONSOLE_BOLD_TEXT_ << "Info: Original camera resolution (" << _INFO_CONSOLE_BOLD_TEXT << original_frame_width << _LOG_CONSOLE_BOLD_TEXT << "x" << _INFO_CONSOLE_BOLD_TEXT << original_frame_height << _ERROR_CONSOLE_BOLD_TEXT_ 
-            << ") is smaller than AI network input (" << _INFO_CONSOLE_BOLD_TEXT << nnWidth << _LOG_CONSOLE_BOLD_TEXT << "x" << _INFO_CONSOLE_BOLD_TEXT << nnHeight << "). AI input will be upscaled. " <<  _NORMAL_CONSOLE_TEXT_ << std::endl;
+            << ") is smaller than AI network input " << _INFO_CONSOLE_BOLD_TEXT << "(" << _INFO_CONSOLE_BOLD_TEXT << nnWidth << _LOG_CONSOLE_BOLD_TEXT << "x" << _INFO_CONSOLE_BOLD_TEXT << nnHeight << "). AI input will be upscaled. " <<  _NORMAL_CONSOLE_TEXT_ << std::endl;
     } else if (original_frame_width != nnWidth || original_frame_height != nnHeight) {
         //  fprintf(stderr, "Info: Original camera resolution (%dx%d) differs from AI network input (%dx%d). Frame will be resized for AI.\n",
         //         original_frame_width, original_frame_height, nnWidth, nnHeight);
@@ -382,6 +382,7 @@ int CYOLOAI::run() {
             size_t numClasses = static_cast<size_t>(out.shape.height); // As per original comment
             size_t current_idx = 0; // Better name than `idx` to avoid conflict with loop variable
 
+            bool object_found = false;
             for (size_t classIdx = 0; classIdx < numClasses; ++classIdx) {
 
                 // Check if this classIdx is in our allowed list
@@ -394,7 +395,7 @@ int CYOLOAI::run() {
                         std::cerr << "Error: NMS output parsing index out of bounds (class count - " << classIdx << "). Not enough data for numBoxes when skipping." << std::endl;
                         break; 
                     }
-                    size_t numBoxesToSkip = static_cast<size_t>(raw[current_idx++]);
+                    const size_t numBoxesToSkip = static_cast<size_t>(raw[current_idx++]);
                     current_idx += numBoxesToSkip * 5; // 5 floats per box (ymin, xmin, ymax, xmax, confidence)
                     continue; // Move to the next class
                 }
@@ -405,7 +406,7 @@ int CYOLOAI::run() {
                     break; 
                 }
 
-                size_t numBoxes = static_cast<size_t>(raw[current_idx++]);
+                const size_t numBoxes = static_cast<size_t>(raw[current_idx++]);
 
                 for (size_t i = 0; i < numBoxes; ++i) {
                     // Check if enough data remains for a full box (5 floats)
@@ -422,6 +423,9 @@ int CYOLOAI::run() {
                     float confidence = raw[current_idx + 4];
                     
                     if (confidence >= confidenceThreshold) {
+                        
+                        object_found = true;
+
                         // Cast to int only at the very end when drawing
                         int x1 = static_cast<int>(xmin_norm * scale_x);
                         int y1 = static_cast<int>(ymin_norm * scale_y);
@@ -443,6 +447,24 @@ int CYOLOAI::run() {
                     current_idx += 5; // Move to the next box
                 }
             }
+            if (m_object_found != object_found)
+            {
+                if (object_found)
+                {
+                    m_callback_yolo_ai->onTrackStatusChanged(TrackingTarget_STATUS_AI_Recognition_DETECTED);
+                    #ifdef DDEBUG
+                        std::cout << _SUCCESS_CONSOLE_BOLD_TEXT_ << "Object Detected." << _NORMAL_CONSOLE_TEXT_ << std::endl;
+                    #endif
+                }
+                else
+                {
+                    m_callback_yolo_ai->onTrackStatusChanged(TrackingTarget_STATUS_AI_Recognition_LOST);
+                    #ifdef DDEBUG
+                        std::cout << _INFO_CONSOLE_BOLD_TEXT << "No Object Found." << _NORMAL_CONSOLE_TEXT_ << std::endl;
+                    #endif
+                }
+                m_object_found = object_found;
+            }
         } else {
             std::cout << "Info: NMS on CPU is not implemented or NMS output structure is different. Output may be raw tensor data." << std::endl;
         }
@@ -458,7 +480,7 @@ int CYOLOAI::run() {
         // `yuv_output_frame.total() * yuv_output_frame.elemSize()` is the correct way to get actual byte size
         // for a continuous Mat.
         if (yuv_output_frame.isContinuous() && yuv_output_frame.total() * yuv_output_frame.elemSize() == output_yuv_frame_size) {
-            ssize_t bytes_written = write(video_fd, yuv_output_frame.data, output_yuv_frame_size);
+            const ssize_t bytes_written = write(video_fd, yuv_output_frame.data, output_yuv_frame_size);
                 
              if (bytes_written < 0) {
                 // Use `std::cerr` for error messages to separate from standard output.
