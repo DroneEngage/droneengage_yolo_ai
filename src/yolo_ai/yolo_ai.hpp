@@ -25,7 +25,7 @@ namespace yolo_ai
 class CCallBack_YOLOAI
 {
     public:
-        virtual void onTrack (const float& x, const float& y, const float& width, const float& height, const uint16_t camera_orientation, const bool camera_forward) = 0;
+        virtual void onTrack (const Json_de targets) = 0;
         virtual void onTrackStatusChanged (const int& status) = 0;
 };
 
@@ -78,7 +78,6 @@ class CCallBack_YOLOAI
             void loadAllowedClassIndices(const Json_de& json_array);
 
 
-        
         private:
             
             bool m_exit_thread;

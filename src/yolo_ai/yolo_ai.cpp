@@ -383,6 +383,7 @@ int CYOLOAI::run() {
             size_t current_idx = 0; // Better name than `idx` to avoid conflict with loop variable
 
             bool object_found = false;
+            Json_de object_found_list = Json_de::array();
             for (size_t classIdx = 0; classIdx < numClasses; ++classIdx) {
 
                 // Check if this classIdx is in our allowed list
@@ -407,7 +408,8 @@ int CYOLOAI::run() {
                 }
 
                 const size_t numBoxes = static_cast<size_t>(raw[current_idx++]);
-
+                
+                
                 for (size_t i = 0; i < numBoxes; ++i) {
                     // Check if enough data remains for a full box (5 floats)
                     // CORRECTED: Use nms_output_byte_size
@@ -443,6 +445,12 @@ int CYOLOAI::run() {
                         
                         cv::rectangle(original_bgr_frame, cv::Point(x1, y1), cv::Point(x2, y2), color, 2);
                         
+                        object_found_list.push_back({
+                            {"x",roundToPrecision(xmin_norm,6)},
+                            {"y",roundToPrecision(ymin_norm,6)},
+                            {"w",roundToPrecision(xmax_norm,6)},
+                            {"h",roundToPrecision(ymax_norm,6)}
+                        });
                     }
                     current_idx += 5; // Move to the next box
                 }
@@ -464,6 +472,11 @@ int CYOLOAI::run() {
                     #endif
                 }
                 m_object_found = object_found;
+            }
+            if (object_found)
+            {
+                m_callback_yolo_ai->onTrack(object_found_list);
+                object_found_list.clear();
             }
         } else {
             std::cout << "Info: NMS on CPU is not implemented or NMS output structure is different. Output may be raw tensor data." << std::endl;

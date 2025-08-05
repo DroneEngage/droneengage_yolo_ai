@@ -17,13 +17,12 @@ void CYOLOAI_Facade::sendTrackingTargetsLocation(const std::string& target_party
         {"t", targets_location}
     };
 
-    #ifdef DDEBUG
-        std::cout << "tracking:" << targets_location.dump() << std::endl;
-    #endif
     #ifdef DEBUG
         std::cout << _INFO_CONSOLE_BOLD_TEXT << "onTrack >> " 
         << _LOG_CONSOLE_BOLD_TEXT << targets_location.dump() << _NORMAL_CONSOLE_TEXT_ << std::endl;
     #endif
+
+    // internal message
     m_module.sendJMSG(target_party_id, message, TYPE_AndruavMessage_TrackingTargetLocation, true);
 }
 

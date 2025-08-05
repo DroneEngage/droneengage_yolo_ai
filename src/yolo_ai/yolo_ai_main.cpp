@@ -100,11 +100,9 @@ void CYOLOAI_Main::startYolo()
  * (0,0) top left
  * center = [(x + w )/2 , (y + h)/2]
  */
-void CYOLOAI_Main::onTrack (const float& x, const float& y, const float& width, const float& height, const uint16_t camera_orientation, const bool camera_forward) 
+void CYOLOAI_Main::onTrack (const Json_de targets) 
 {
 
-    Json_de targets = Json_de::array();
-    
     m_trackerFacade.sendTrackingTargetsLocation (
         std::string(""),
         targets

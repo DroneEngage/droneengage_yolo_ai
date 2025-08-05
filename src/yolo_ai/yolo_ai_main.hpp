@@ -70,7 +70,7 @@ namespace yolo_ai
 
         public:
             //CCallBack_Tracker
-            void onTrack (const float& x, const float& y, const float& width, const float& height, const uint16_t camera_orientation, const bool camera_forward) override ;
+            void onTrack (const Json_de targets) override ;
             void onTrackStatusChanged (const int& track) override ;
 
         
