@@ -293,7 +293,7 @@ int CYOLOAI::run() {
         // as it avoids temporary `Mat` construction by reading directly into `original_bgr_frame`.
         if (!video_capture.read(original_bgr_frame) || original_bgr_frame.empty()) {
             std::cerr << _ERROR_CONSOLE_BOLD_TEXT_ << "Failed to capture frame or end of stream." << _NORMAL_CONSOLE_TEXT_ << std::endl;
-            break;
+            continue;
         }
 
         // AI processing (when active)
