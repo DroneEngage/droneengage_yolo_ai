@@ -87,7 +87,7 @@ void CYOLOAI::pause()
 
     if (m_callback_yolo_ai != nullptr)
     {
-        m_callback_yolo_ai->onTrackStatusChanged(TrackingTarget_STATUS_AI_Recognition_STOPPED);
+        m_callback_yolo_ai->onTrackStatusChanged(TrackingTarget_STATUS_AI_Recognition_DISABLED);
     }
 }
 
@@ -99,7 +99,7 @@ void CYOLOAI::stop()
     
     if (m_callback_yolo_ai != nullptr)
     {
-        m_callback_yolo_ai->onTrackStatusChanged(TrackingTarget_STATUS_AI_Recognition_STOPPED);
+        m_callback_yolo_ai->onTrackStatusChanged(TrackingTarget_STATUS_AI_Recognition_DISABLED);
     }
 }
 
@@ -382,8 +382,17 @@ int CYOLOAI::run() {
             size_t numClasses = static_cast<size_t>(out.shape.height); // As per original comment
             size_t current_idx = 0; // Better name than `idx` to avoid conflict with loop variable
 
+
+            const int W = original_bgr_frame.cols;
+            const int H = original_bgr_frame.rows;
+            cv::Point frame_center(W / 2, H / 2);
+            float min_distance_sq = -1.0f; // Initialize with a negative value
+            Json_de best_object_json;
+            cv::Rect best_bbox;
+
             bool object_found = false;
             Json_de object_found_list = Json_de::array();
+            
             for (size_t classIdx = 0; classIdx < numClasses; ++classIdx) {
 
                 // Check if this classIdx is in our allowed list
@@ -433,27 +442,52 @@ int CYOLOAI::run() {
                         int y1 = static_cast<int>(ymin_norm * scale_y);
                         int x2 = static_cast<int>(xmax_norm * scale_x);
                         int y2 = static_cast<int>(ymax_norm * scale_y);
+                        cv::Point box_center((x1 + x2) / 2, (y1 + y2) / 2);
+
 
                         cv::Scalar color;
                         if (confidence > 0.85) {
                             color = cv::Scalar(0, 255, 0); // Green (B, G, R)
                         } else if (confidence > 0.75) {
-                            color = cv::Scalar(0, 255, 255); // Yellow (B, G, R)
+                            color = cv::Scalar(0, 200, 200); // Yellow (B, G, R)
                         } else {
-                            color = cv::Scalar(0, 0, 255); // Red (B, G, R)
+                            color = cv::Scalar(100, 0, 0); // Red (B, G, R)
                         }
                         
                         cv::rectangle(original_bgr_frame, cv::Point(x1, y1), cv::Point(x2, y2), color, 2);
                         
                         object_found_list.push_back({
-                            {"x",roundToPrecision(xmin_norm,6)},
-                            {"y",roundToPrecision(ymin_norm,6)},
-                            {"w",roundToPrecision(xmax_norm,6)},
-                            {"h",roundToPrecision(ymax_norm,6)}
+                            {"x",roundToPrecision(xmin_norm,3)},
+                            {"y",roundToPrecision(ymin_norm,3)},
+                            {"w",roundToPrecision(xmax_norm - xmin_norm,3)},
+                            {"h",roundToPrecision(ymax_norm - ymin_norm,3)}
                         });
+
+                        // Calculate squared distance from frame center
+                        const float distance_sq = pow(box_center.x - frame_center.x, 2) + pow(box_center.y - frame_center.y, 2);
+        
+                        // Check if this is the closest object so far
+                        if (min_distance_sq < 0 || distance_sq < min_distance_sq) {
+                            min_distance_sq = distance_sq;
+                            
+                            // Store this as the new best detection
+                            best_object_json = Json_de::object();
+                            best_object_json["x"] = roundToPrecision(xmin_norm, 3);
+                            best_object_json["y"] = roundToPrecision(ymin_norm, 3);
+                            best_object_json["w"] = roundToPrecision(xmax_norm - xmin_norm, 3);
+                            best_object_json["h"] = roundToPrecision(ymax_norm - ymin_norm, 3);
+
+                            // You can also store the bounding box here for drawing
+                            best_bbox = cv::Rect(x1, y1, x2-x1, y2-y1);
+                        }
                     }
                     current_idx += 5; // Move to the next box
                 }
+            }
+            if (!best_object_json.empty()) {
+                // Draw the rectangle for the selected object (you'll need to re-extract the bbox from the json or store it)
+                cv::rectangle(original_bgr_frame, best_bbox, cv::Scalar(0, 0, 0), 2);
+                m_callback_yolo_ai->onBestObject(best_object_json);
             }
             if (m_object_found != object_found)
             {

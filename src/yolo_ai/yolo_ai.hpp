@@ -26,6 +26,7 @@ class CCallBack_YOLOAI
 {
     public:
         virtual void onTrack (const Json_de targets) = 0;
+        virtual void onBestObject (const Json_de targets) = 0;
         virtual void onTrackStatusChanged (const int& status) = 0;
 };
 

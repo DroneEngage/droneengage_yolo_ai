@@ -18,13 +18,35 @@ void CYOLOAI_Facade::sendTrackingTargetsLocation(const std::string& target_party
     };
 
     #ifdef DEBUG
-        std::cout << _INFO_CONSOLE_BOLD_TEXT << "onTrack >> " 
+        std::cout << _INFO_CONSOLE_BOLD_TEXT << "onBestObject >> " 
         << _LOG_CONSOLE_BOLD_TEXT << targets_location.dump() << _NORMAL_CONSOLE_TEXT_ << std::endl;
     #endif
 
     // internal message
-    m_module.sendJMSG(target_party_id, message, TYPE_AndruavMessage_TrackingTargetLocation, true);
+    m_module.sendJMSG(target_party_id, message, TYPE_AndruavMessage_AI_Recognition_TargetLocation, true);
 }
+
+void CYOLOAI_Facade::sendTrackingBestTargetsLocation(const std::string& target_party_id, const Json_de targets_location) const
+{
+    if (targets_location.empty())
+    {
+        return;
+    }
+
+    Json_de message =
+    {
+        {"b", targets_location}
+    };
+
+    #ifdef DEBUG
+        std::cout << _INFO_CONSOLE_BOLD_TEXT << "onBestObject >> " 
+        << _LOG_CONSOLE_BOLD_TEXT << targets_location.dump() << _NORMAL_CONSOLE_TEXT_ << std::endl;
+    #endif
+
+    // internal message
+    m_module.sendJMSG(target_party_id, message, TYPE_AndruavMessage_AI_Recognition_TargetLocation, true);
+}
+            
 
 
 void CYOLOAI_Facade::sendTrackingClassesList(const std::string& target_party_id)

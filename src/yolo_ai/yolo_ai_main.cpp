@@ -103,7 +103,26 @@ void CYOLOAI_Main::startYolo()
 void CYOLOAI_Main::onTrack (const Json_de targets) 
 {
 
-    m_trackerFacade.sendTrackingTargetsLocation (
+    #ifdef DEBUG
+        std::cout << _INFO_CONSOLE_BOLD_TEXT << "onTrack >> " 
+        << _LOG_CONSOLE_BOLD_TEXT << targets.dump() << _NORMAL_CONSOLE_TEXT_ << std::endl;
+    
+
+        // Too much traffic ... dont send this.
+        m_trackerFacade.sendTrackingTargetsLocation (
+            std::string(""),
+            targets
+        );
+    
+    #endif
+
+    
+}
+
+void CYOLOAI_Main::onBestObject (const Json_de targets) 
+{
+
+    m_trackerFacade.sendTrackingBestTargetsLocation (
         std::string(""),
         targets
     );
@@ -114,6 +133,8 @@ void CYOLOAI_Main::onTrack (const Json_de targets)
  */
 void CYOLOAI_Main::onTrackStatusChanged (const int& status)  
 {
+    m_ai_tracker_status = status;
+
     m_trackerFacade.sendTrackingTargetStatus (
         std::string(""),
         status
@@ -127,17 +148,35 @@ void CYOLOAI_Main::onTrackStatusChanged (const int& status)
     
  void CYOLOAI_Main::startTrackingObjects(const Json_de& allowed_class_indices)
  {
+    if (m_ai_tracker_status == TrackingTarget_STATUS_AI_Recognition_DISABLED) 
+        return ;  //TODO: Can report Message Here
+
     m_yolo_ai.loadAllowedClassIndices(allowed_class_indices);
     m_yolo_ai.detect();
  }
 
- void CYOLOAI_Main::stopTracking()
+ void CYOLOAI_Main::disableTracking()
  {
-    m_yolo_ai.stop();
+    //m_yolo_ai.stop();
+
+    pauseTracking(); 
  }
 
 void CYOLOAI_Main::pauseTracking()
 {
     m_yolo_ai.pause();
+}
 
+
+void CYOLOAI_Main::enableTracking()
+{
+   // this state means I will accept start AI command.
+   // this is not a real start for the AI core.
+    m_ai_tracker_status = TrackingTarget_STATUS_AI_Recognition_ENABLED;
+
+     // ACK
+    m_trackerFacade.sendTrackingTargetStatus (
+        std::string(""),
+        m_ai_tracker_status
+    );
 }

@@ -40,28 +40,40 @@ void CYOLOAI_Parser::parseMessage (Json_de &andruav_message, const char * full_m
 
                     case TrackingTarget_ACTION_AI_Recognition_SEARCH:
                     {
-                    
                         if (!cmd.contains("i") || !cmd["i"].is_array()) return ; // bad command parameters
                         const Json_de& class_indicies = cmd["i"];
                         
+                        #ifdef DEBUG
                         std::cout << "TrackingTarget_ACTION_AI_Recognition_SEARCH" << std::endl;
+                        #endif
                         m_tracker_main.startTrackingObjects(class_indicies);
                     }
                     break;
                     
-                    case TrackingTarget_ACTION_AI_Recognition_STOP:
-                        std::cout << "TrackingTarget_ACTION_AI_Recognition_STOP" << std::endl;
-                        m_tracker_main.stopTracking();
+                    case TrackingTarget_ACTION_AI_Recognition_DISABLE:
+                    {
+                        #ifdef DEBUG
+                        std::cout << "TrackingTarget_ACTION_AI_Recognition_DISABLE" << std::endl;
+                        #endif
+                        m_tracker_main.disableTracking();
+                    }
                     break;
 
-                    case TrackingTarget_ACTION_AI_Recognition_PAUSE:
-                        std::cout << "TrackingTarget_ACTION_AI_Recognition_PAUSE" << std::endl;
-                        m_tracker_main.pauseTracking();
+                    
+                    case TrackingTarget_ACTION_AI_Recognition_ENABLE:
+                    {
+                        #ifdef DEBUG
+                        std::cout << "TrackingTarget_ACTION_AI_Recognition_ENABLE" << std::endl;
+                        #endif
+                        m_tracker_main.enableTracking();
+                    }
                     break;
 
                     case TrackingTarget_ACTION_AI_Recognition_CLASS_LIST:
+                    {
                         std::cout << "TrackingTarget_ACTION_AI_Recognition_CLASS_LIST" << std::endl;
                         m_tracker_facade.sendTrackingClassesList(std::string(""));
+                    }
                     break;
                 }
             }

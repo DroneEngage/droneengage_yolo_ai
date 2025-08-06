@@ -65,12 +65,14 @@ namespace yolo_ai
 
         public:
             void startTrackingObjects(const Json_de& allowed_class_indices);
-            void stopTracking();
+            void disableTracking();
             void pauseTracking();
-
+            void enableTracking();
+            
         public:
             //CCallBack_Tracker
             void onTrack (const Json_de targets) override ;
+            void onBestObject (const Json_de targets) override ;
             void onTrackStatusChanged (const int& track) override ;
 
         
@@ -86,6 +88,8 @@ namespace yolo_ai
             
             bool m_exit_thread;
 
+            int m_ai_tracker_status = TrackingTarget_STATUS_AI_Recognition_DISABLED;
+            
             std::thread m_threadSenderID;
 
             std::string m_hef_model_path;
