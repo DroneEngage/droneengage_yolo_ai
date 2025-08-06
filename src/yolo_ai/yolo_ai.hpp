@@ -89,7 +89,8 @@ class CCallBack_YOLOAI
             std::string m_output_video_device;
             std::string m_hef_model_path;
             std::vector<std::string> m_class_names;
-
+            Json_de  m_prev_best_object_json;
+            
             std::set<size_t> m_allowed_class_indices; // To store the simplified list
 
             CCallBack_YOLOAI* m_callback_yolo_ai = nullptr;

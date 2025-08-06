@@ -382,15 +382,10 @@ int CYOLOAI::run() {
             size_t numClasses = static_cast<size_t>(out.shape.height); // As per original comment
             size_t current_idx = 0; // Better name than `idx` to avoid conflict with loop variable
 
-
-            const int W = original_bgr_frame.cols;
-            const int H = original_bgr_frame.rows;
-            cv::Point frame_center(W / 2, H / 2);
-            float min_distance_sq = -1.0f; // Initialize with a negative value
+            const cv::Point2f frame_center(0.5f, 0.5f); // Center in normalized coordinates
+            float best_score = -1.0f; // Initialize with a negative value (higher score is better)
             Json_de best_object_json;
             cv::Rect best_bbox;
-            size_t best_class_idx = 0;
-            float best_confidence = 0.0f;
 
             bool object_found = false;
             Json_de object_found_list = Json_de::array();
@@ -434,38 +429,64 @@ int CYOLOAI::run() {
                         
                         object_found = true;
 
-                        // Cast to int only at the very end when drawing
+                        // Calculate box center in normalized coordinates
+                        cv::Point2f box_center((xmin_norm + xmax_norm) / 2.0f, (ymin_norm + ymax_norm) / 2.0f);
+
+                        // Calculate squared distance to frame center in normalized coordinates
+                        const float distance_to_center_sq = pow(box_center.x - frame_center.x, 2) + pow(box_center.y - frame_center.y, 2);
+
+                        // Normalize distance to frame center (max distance is to corner, sqrt(0.5^2 + 0.5^2) = sqrt(0.5) ≈ 0.707)
+                        const float max_distance_sq = 0.5f; // (0.5^2 + 0.5^2)
+                        const float normalized_distance_to_center = distance_to_center_sq / max_distance_sq;
+
+                        // Calculate distance to previous best object's center (if available)
+                        float normalized_distance_to_prev = 1.0f; // Default to max distance if no previous object
+                        if (!m_prev_best_object_json.empty()) {
+                            float prev_x = m_prev_best_object_json["x"].get<float>();
+                            float prev_y = m_prev_best_object_json["y"].get<float>();
+                            float prev_center_x = prev_x + m_prev_best_object_json["w"].get<float>() / 2.0f;
+                            float prev_center_y = prev_y + m_prev_best_object_json["h"].get<float>() / 2.0f;
+                            const float distance_to_prev_sq = pow(box_center.x - prev_center_x, 2) + pow(box_center.y - prev_center_y, 2);
+                            normalized_distance_to_prev = distance_to_prev_sq / max_distance_sq;
+                        }
+
+                        // Optional: Include area in the score
+                        const float area = (xmax_norm - xmin_norm) * (ymax_norm - ymin_norm);
+                        const float max_area = 1.0f; // Max area in normalized coordinates is 1x1
+                        const float normalized_area = area / max_area;
+
+                        // Weighted sum score: confidence (0.5), distance to center (0.3), distance to previous (0.15), area (0.05)
+                        const float score = 0.5f * confidence + 0.3f * (1.0f - normalized_distance_to_center) + 
+                                            0.15f * (1.0f - normalized_distance_to_prev) + 0.05f * normalized_area;
+
+                        // Convert to pixel coordinates for drawing
                         int x1 = static_cast<int>(xmin_norm * scale_x);
                         int y1 = static_cast<int>(ymin_norm * scale_y);
                         int x2 = static_cast<int>(xmax_norm * scale_x);
                         int y2 = static_cast<int>(ymax_norm * scale_y);
-                        cv::Point box_center((x1 + x2) / 2, (y1 + y2) / 2);
+
                         std::string label_text;
 
-                        // Calculate squared distance from frame center
-                        const float distance_sq = pow(box_center.x - frame_center.x, 2) + pow(box_center.y - frame_center.y, 2);
-        
-                        // Check if this is the closest object so far
-                        bool is_best_box = (min_distance_sq < 0 || distance_sq < min_distance_sq);
-                        if (is_best_box) {
-                            min_distance_sq = distance_sq;
+                        // Check if this is the best object so far
+                        if (best_score < 0 || score > best_score) {
+                            best_score = score;
                             best_object_json = Json_de::object();
                             best_object_json["x"] = roundToPrecision(xmin_norm, 3);
                             best_object_json["y"] = roundToPrecision(ymin_norm, 3);
                             best_object_json["w"] = roundToPrecision(xmax_norm - xmin_norm, 3);
                             best_object_json["h"] = roundToPrecision(ymax_norm - ymin_norm, 3);
+                            // Optional: Include confidence in JSON (uncomment if needed)
+                            // best_object_json["confidence"] = roundToPrecision(confidence, 3);
                             best_bbox = cv::Rect(x1, y1, x2 - x1, y2 - y1);
-                            best_class_idx = classIdx;
-                            best_confidence = confidence;
                         } else {
-                            // Draw colored box only for non-best boxes
+                            // Draw colored box for non-best boxes
                             cv::Scalar color;
                             if (confidence > 0.85) {
-                                color = cv::Scalar(0, 255, 0); // Green (B, G, R)
+                                color = cv::Scalar(0, 255, 0); // Green
                             } else if (confidence > 0.75) {
-                                color = cv::Scalar(0, 200, 200); // Yellow (B, G, R)
+                                color = cv::Scalar(0, 200, 200); // Yellow
                             } else {
-                                color = cv::Scalar(100, 0, 0); // Red (B, G, R)
+                                color = cv::Scalar(100, 0, 0); // Red
                             }
                             cv::rectangle(original_bgr_frame, cv::Point(x1, y1), cv::Point(x2, y2), color, 2);
                         }
@@ -478,7 +499,7 @@ int CYOLOAI::run() {
                         }
 
                         int baseline = 0;
-                        cv::Size text_size = cv::getTextSize(label_text, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseline);
+                        cv::getTextSize(label_text, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseline); // Removed text_size
                         cv::putText(original_bgr_frame, label_text, cv::Point(x1, y1 - 5), 
                                     cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0), 1);
 
@@ -497,11 +518,13 @@ int CYOLOAI::run() {
             if (!best_object_json.empty()) {
                 cv::rectangle(original_bgr_frame, best_bbox, cv::Scalar(0, 0, 0), 2);
                 m_callback_yolo_ai->onBestObject(best_object_json);
+                m_prev_best_object_json = best_object_json; // Update previous best object for next frame
+            } else {
+                m_prev_best_object_json.clear(); // Clear previous object if no best object is found
             }
-            if (m_object_found != object_found)
-            {
-                if (object_found)
-                {
+
+            if (m_object_found != object_found) {
+                if (object_found) {
                     m_callback_yolo_ai->onTrackStatusChanged(TrackingTarget_STATUS_AI_Recognition_DETECTED);
                     #ifdef DDEBUG
                         std::cout << _SUCCESS_CONSOLE_BOLD_TEXT_ << "Object Detected." << _NORMAL_CONSOLE_TEXT_ << std::endl;
