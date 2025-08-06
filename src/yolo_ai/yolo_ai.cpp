@@ -389,6 +389,8 @@ int CYOLOAI::run() {
             float min_distance_sq = -1.0f; // Initialize with a negative value
             Json_de best_object_json;
             cv::Rect best_bbox;
+            size_t best_class_idx = 0;
+            float best_confidence = 0.0f;
 
             bool object_found = false;
             Json_de object_found_list = Json_de::array();
@@ -397,10 +399,7 @@ int CYOLOAI::run() {
 
                 // Check if this classIdx is in our allowed list
                 if (!m_allowed_class_indices.empty() && m_allowed_class_indices.find(classIdx) == m_allowed_class_indices.end()) {
-                    // If m_allowed_class_indices is not empty AND the current classIdx is NOT found in it,
-                    // then skip this class entirely.
-                    
-                    // We still need to advance current_idx past the numBoxes for this class
+                    // Skip this class if not in allowed list
                     if (current_idx * sizeof(float) >= nms_output_byte_size) { 
                         std::cerr << "Error: NMS output parsing index out of bounds (class count - " << classIdx << "). Not enough data for numBoxes when skipping." << std::endl;
                         break; 
@@ -421,10 +420,8 @@ int CYOLOAI::run() {
                 
                 for (size_t i = 0; i < numBoxes; ++i) {
                     // Check if enough data remains for a full box (5 floats)
-                    // CORRECTED: Use nms_output_byte_size
                     if ((current_idx + 4) * sizeof(float) >= nms_output_byte_size) { 
                         std::cerr << "Error: NMS output parsing index out of bounds (box data - " << i << " of class " << classIdx << "). Not enough data for box." << std::endl;
-                        // For a critical error like this, it might be better to break completely or handle it more robustly.
                         break; // Break from inner loop, try next class if any data remains
                     }
                     float ymin_norm = raw[current_idx];
@@ -443,49 +440,61 @@ int CYOLOAI::run() {
                         int x2 = static_cast<int>(xmax_norm * scale_x);
                         int y2 = static_cast<int>(ymax_norm * scale_y);
                         cv::Point box_center((x1 + x2) / 2, (y1 + y2) / 2);
-
-
-                        cv::Scalar color;
-                        if (confidence > 0.85) {
-                            color = cv::Scalar(0, 255, 0); // Green (B, G, R)
-                        } else if (confidence > 0.75) {
-                            color = cv::Scalar(0, 200, 200); // Yellow (B, G, R)
-                        } else {
-                            color = cv::Scalar(100, 0, 0); // Red (B, G, R)
-                        }
-                        
-                        cv::rectangle(original_bgr_frame, cv::Point(x1, y1), cv::Point(x2, y2), color, 2);
-                        
-                        object_found_list.push_back({
-                            {"x",roundToPrecision(xmin_norm,3)},
-                            {"y",roundToPrecision(ymin_norm,3)},
-                            {"w",roundToPrecision(xmax_norm - xmin_norm,3)},
-                            {"h",roundToPrecision(ymax_norm - ymin_norm,3)}
-                        });
+                        std::string label_text;
 
                         // Calculate squared distance from frame center
                         const float distance_sq = pow(box_center.x - frame_center.x, 2) + pow(box_center.y - frame_center.y, 2);
         
                         // Check if this is the closest object so far
-                        if (min_distance_sq < 0 || distance_sq < min_distance_sq) {
+                        bool is_best_box = (min_distance_sq < 0 || distance_sq < min_distance_sq);
+                        if (is_best_box) {
                             min_distance_sq = distance_sq;
-                            
-                            // Store this as the new best detection
                             best_object_json = Json_de::object();
                             best_object_json["x"] = roundToPrecision(xmin_norm, 3);
                             best_object_json["y"] = roundToPrecision(ymin_norm, 3);
                             best_object_json["w"] = roundToPrecision(xmax_norm - xmin_norm, 3);
                             best_object_json["h"] = roundToPrecision(ymax_norm - ymin_norm, 3);
-
-                            // You can also store the bounding box here for drawing
-                            best_bbox = cv::Rect(x1, y1, x2-x1, y2-y1);
+                            best_bbox = cv::Rect(x1, y1, x2 - x1, y2 - y1);
+                            best_class_idx = classIdx;
+                            best_confidence = confidence;
+                        } else {
+                            // Draw colored box only for non-best boxes
+                            cv::Scalar color;
+                            if (confidence > 0.85) {
+                                color = cv::Scalar(0, 255, 0); // Green (B, G, R)
+                            } else if (confidence > 0.75) {
+                                color = cv::Scalar(0, 200, 200); // Yellow (B, G, R)
+                            } else {
+                                color = cv::Scalar(100, 0, 0); // Red (B, G, R)
+                            }
+                            cv::rectangle(original_bgr_frame, cv::Point(x1, y1), cv::Point(x2, y2), color, 2);
                         }
+
+                        // Draw label for all boxes
+                        if (classIdx < m_class_names.size()) {
+                            label_text = cv::format("%s: %.2f", m_class_names[classIdx].c_str(), confidence);
+                        } else {
+                            label_text = cv::format("Class %zu: %.2f", classIdx, confidence);
+                        }
+
+                        int baseline = 0;
+                        cv::Size text_size = cv::getTextSize(label_text, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseline);
+                        cv::putText(original_bgr_frame, label_text, cv::Point(x1, y1 - 5), 
+                                    cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0), 1);
+
+                        object_found_list.push_back({
+                            {"x", roundToPrecision(xmin_norm, 3)},
+                            {"y", roundToPrecision(ymin_norm, 3)},
+                            {"w", roundToPrecision(xmax_norm - xmin_norm, 3)},
+                            {"h", roundToPrecision(ymax_norm - ymin_norm, 3)}
+                        });
                     }
                     current_idx += 5; // Move to the next box
                 }
             }
+
+            // Draw the best box in black if it exists
             if (!best_object_json.empty()) {
-                // Draw the rectangle for the selected object (you'll need to re-extract the bbox from the json or store it)
                 cv::rectangle(original_bgr_frame, best_bbox, cv::Scalar(0, 0, 0), 2);
                 m_callback_yolo_ai->onBestObject(best_object_json);
             }
@@ -497,9 +506,7 @@ int CYOLOAI::run() {
                     #ifdef DDEBUG
                         std::cout << _SUCCESS_CONSOLE_BOLD_TEXT_ << "Object Detected." << _NORMAL_CONSOLE_TEXT_ << std::endl;
                     #endif
-                }
-                else
-                {
+                } else {
                     m_callback_yolo_ai->onTrackStatusChanged(TrackingTarget_STATUS_AI_Recognition_LOST);
                     #ifdef DDEBUG
                         std::cout << _INFO_CONSOLE_BOLD_TEXT << "No Object Found." << _NORMAL_CONSOLE_TEXT_ << std::endl;
@@ -507,14 +514,15 @@ int CYOLOAI::run() {
                 }
                 m_object_found = object_found;
             }
-            if (object_found)
-            {
+            if (object_found) {
                 m_callback_yolo_ai->onTrack(object_found_list);
                 object_found_list.clear();
             }
         } else {
             std::cout << "Info: NMS on CPU is not implemented or NMS output structure is different. Output may be raw tensor data." << std::endl;
         }
+                
+                
 #endif // TEST_MODE_NO_HAILO_LINK
 
         } // END OF ADDITION: if (!m_is_AI_yolo_active_initial) block
