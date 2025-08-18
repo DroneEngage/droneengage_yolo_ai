@@ -338,7 +338,7 @@ void de::comm::CModule::createJSONID (bool reSend)
         ms[JSON_INTERMODULE_TIMESTAMP_INSTANCE]     = m_instance_time_stamp;
 
         // Add fields from m_stdinValues to ms
-        for (const std::pair<std::string, Json_de>&  entry : m_stdinValues) {
+        for (const std::pair<std::string, Json_de>  entry : m_stdinValues) {
             const std::string& key = entry.first;
             const Json_de& value = entry.second;
             ms[key] = value;
