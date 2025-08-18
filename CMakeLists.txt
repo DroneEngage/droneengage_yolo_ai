@@ -97,7 +97,9 @@ file(GLOB folder_ai "./src/yolo_ai/*.cpp")
 
 # Define an option for user control over DETAILED_DEBUG
 option(DDEBUG "Detailed Debug" OFF) # Default is OFF
-option(TEST_MODE_NO_HAILO_LINK "Do not link to Hailo LIB" OFF) # Default is OFF
+option(UDP_AI_DETECTION "SOURCE:  IMX500 or any UDP-AI" OFF) # Default is OFF
+option(HAILO_AI_DETECTION "SOURCE: HAILO Board" ON) # Default is OFF
+option(TEST_MODE_NO_HAILO_LINK "SOURCE: FAKE SOURCE - Do not link to Hailo LIB" OFF) # Default is OFF
 
 
 set(files ${folder_src} ${folder_common} ${folder_ai} ${folder_helpers})
@@ -112,10 +114,13 @@ target_compile_definitions(de_yolo_ai PRIVATE
     $<$<BOOL:${DDEBUG}>:DDEBUG>
 )
 # Link the required libraries
-if(NOT TEST_MODE_NO_HAILO_LINK)
+if((NOT TEST_MODE_NO_HAILO_LINK) AND (NOT UDP_AI_DETECTION))
   target_link_libraries(de_yolo_ai 
     hailort
   )
+  target_compile_definitions (de_yolo_ai PRIVATE HAILO_AI_DETECTION)
+elseif (UDP_AI_DETECTION)
+  target_compile_definitions (de_yolo_ai PRIVATE UDP_AI_DETECTION)
 else()
   # Define the preprocessor macro for TEST_MODE_NO_HAILO_LINK
   target_compile_definitions(de_yolo_ai PRIVATE TEST_MODE_NO_HAILO_LINK)
@@ -127,7 +132,7 @@ target_link_libraries(de_yolo_ai  Threads::Threads)
 
 set_target_properties( de_yolo_ai 
                 PROPERTIES 
-                    OUTPUT_NAME "de_yolo_ai"
+                    OUTPUT_NAME "de_ai_tracker"
                     SUFFIX ".so"
                 )
 
@@ -146,10 +151,20 @@ if (DDEBUG)
 endif()
 
 if (TEST_MODE_NO_HAILO_LINK)
-    message(STATUS "${Red}Option TEST_MODE_NO_HAILO_LINK (No Hailo Link) is ENABLED.${ColourReset}")
+    message(STATUS "${Green}Option TEST_MODE_NO_HAILO_LINK is ENABLED.${ColourReset}")
+    message(STATUS "${Red}(No Hailo Link) HAILO will not be detected.${ColourReset}")
 endif()
 
-configure_file(de_yolo_ai.config.module.json ${OUTPUT_DIRECTORY}/de_yolo_ai.config.module.json COPYONLY)
+if (HAILO_AI_DETECTION)
+    message(STATUS "${Green}Option HAILO-AI is ENABLED.${ColourReset}")
+endif()
+
+if (UDP_AI_DETECTION)
+    message(STATUS "${Green}Option UDP_AI_DETECTION (UDP-Remote-Detection) is ENABLED.${ColourReset}")
+    message(STATUS "${Red}(No Hailo Link) HAILO will not be detected.${ColourReset}")
+endif()
+
+configure_file(de_ai_tracker.config.module.json ${OUTPUT_DIRECTORY}/de_ai_tracker.config.module.json COPYONLY)
 
 
 message ("${Yellow}=========================================================================${ColourReset}")

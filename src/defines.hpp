@@ -16,7 +16,7 @@
  * @brief configuration file path & name
  * 
  */
-static std::string configName = "de_yolo_ai.config.module.json";
-static std::string localConfigName = "de_yolo_ai.config.local";
+static std::string configName = "de_ai_tracker.config.module.json";
+static std::string localConfigName = "de_ai_tracker.config.local";
 
 #endif
