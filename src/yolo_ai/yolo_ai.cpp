@@ -1,3 +1,5 @@
+#ifndef UDP_AI_DETECTION
+
 #include <chrono> // For high-resolution timing
 #include <iostream>
 #include <signal.h>
@@ -12,7 +14,7 @@
 
 #include "../defines.hpp"
 
-#ifndef TEST_MODE_NO_HAILO_LINK
+#ifndef TEST_MODE_NO_HAILO_LINK  
 #include <hailo/hailort.hpp>
 #include <hailo/hailort_common.hpp>
 #include <hailo/vdevice.hpp>
@@ -441,7 +443,7 @@ while (!m_exit_thread) {
                             best_object_json["h"] = roundToPrecision(ymax_norm - ymin_norm, 3);
                             best_bbox = cv::Rect(x1, y1, x2 - x1, y2 - y1);
                         } else {
-                            const cv::Scalar color = cv::Scalar(0, 200, 0) :
+                            const cv::Scalar color = cv::Scalar(0, 200, 0);
                             cv::rectangle(original_bgr_frame, cv::Point(x1, y1), cv::Point(x2, y2), color, 2);
                         }
 
@@ -568,3 +570,5 @@ while (!m_exit_thread) {
     #endif
     return 0;
 }
+
+#endif

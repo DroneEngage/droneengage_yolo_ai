@@ -19,6 +19,9 @@ bool CYOLOAI_Main::init()
 {
     de::CConfigFile& cConfigFile = de::CConfigFile::getInstance();
     const Json_de& jsonConfig = cConfigFile.GetConfigJSON();
+
+#ifndef UDP_AI_DETECTION
+
     if (!validateField(jsonConfig, "source_video_device", Json_de::value_t::string))
     {
         std::cout << _ERROR_CONSOLE_BOLD_TEXT_ << "Fatal Error:" << _NORMAL_CONSOLE_TEXT_ << " Missing field or bad string format " << _INFO_CONSOLE_BOLD_TEXT << " source_video_device " << _NORMAL_CONSOLE_TEXT_<< std::endl;
@@ -49,6 +52,8 @@ bool CYOLOAI_Main::init()
 
     std::cout << _SUCCESS_CONSOLE_BOLD_TEXT_ << "model_path: " << _INFO_CONSOLE_TEXT << model_path << _NORMAL_CONSOLE_TEXT_ << std::endl;
     
+#endif
+
     if (!validateField(jsonConfig, "class_names", nlohmann::json::value_t::array))
     {
         std::cout << _ERROR_CONSOLE_BOLD_TEXT_ << "Fatal Error: " << _NORMAL_CONSOLE_TEXT_ << "Missing field or bad array format " << _INFO_CONSOLE_BOLD_TEXT << " classNames " << _NORMAL_CONSOLE_TEXT_<< std::endl;
@@ -67,10 +72,22 @@ bool CYOLOAI_Main::init()
     
     std::cout << _SUCCESS_CONSOLE_BOLD_TEXT_ << "class_names: " << _INFO_CONSOLE_TEXT << "filled." << _NORMAL_CONSOLE_TEXT_ << std::endl;
     
+#ifdef UDP_AI_DETECTION
+    de::yolo_ai::CUDP_AI_Receiver& m_udp_ai_receiver = de::yolo_ai::CUDP_AI_Receiver::getInstance();
+    int port = jsonConfig.contains("external_ai_feed_port")
+        && jsonConfig["external_ai_feed_port"].is_number_unsigned()?jsonConfig["external_ai_feed_port"].get<int>():12347;
+        
+    m_udp_ai_receiver.init(port, [this](ParsedDetection detection) {
+            this->onReceive(detection);
+        });
+    
+
+#else
+    de::yolo_ai::CYOLOAI& m_yolo_ai = de::yolo_ai::CYOLOAI::getInstance();
+            
     m_yolo_ai.init(source_video_device, model_path, output_video_device, m_class_names, this);
-
-
     m_threadSenderID = std::thread {[&](){ m_yolo_ai.run();}};
+#endif
 
     return true;
 }
@@ -78,7 +95,13 @@ bool CYOLOAI_Main::init()
 
 bool CYOLOAI_Main::uninit()
 {
+#ifdef UDP_AI_DETECTION
+
+#else
+    de::yolo_ai::CYOLOAI& m_yolo_ai = de::yolo_ai::CYOLOAI::getInstance();
+            
     m_yolo_ai.stop();
+#endif
     if(m_threadSenderID.joinable())
     {
         m_threadSenderID.join();
@@ -150,23 +173,42 @@ void CYOLOAI_Main::onTrackStatusChanged (const int& status)
  {
     if (m_ai_tracker_status == TrackingTarget_STATUS_AI_Recognition_DISABLED) 
         return ;  //TODO: Can report Message Here
+#ifdef UDP_AI_DETECTION
 
+#else
+    de::yolo_ai::CYOLOAI& m_yolo_ai = de::yolo_ai::CYOLOAI::getInstance();
+            
     m_yolo_ai.loadAllowedClassIndices(allowed_class_indices);
     m_yolo_ai.detect();
+#endif
  }
 
  void CYOLOAI_Main::disableTracking()
  {
-    //m_yolo_ai.stop();
-
     pauseTracking(); 
  }
 
 void CYOLOAI_Main::pauseTracking()
 {
+#ifdef UDP_AI_DETECTION
+
+#else
+    de::yolo_ai::CYOLOAI& m_yolo_ai = de::yolo_ai::CYOLOAI::getInstance();
+            
     m_yolo_ai.pause();
+#endif
 }
 
+void CYOLOAI_Main::onReceive (ParsedDetection detection)
+{
+    Json_de best_object_json = Json_de::object();
+        best_object_json["x"] = roundToPrecision(detection.x, 3);
+        best_object_json["y"] = roundToPrecision(detection.y, 3);
+        best_object_json["w"] = roundToPrecision(detection.width, 3);
+        best_object_json["h"] = roundToPrecision(detection.height, 3);
+    onBestObject(best_object_json);
+    std::cout << "detection:" << detection.name << ":" << detection.category << std::endl;
+}
 
 void CYOLOAI_Main::enableTracking()
 {

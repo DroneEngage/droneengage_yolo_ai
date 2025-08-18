@@ -10,7 +10,7 @@
 #include <memory>
 #include <string>
 
-#ifndef TEST_MODE_NO_HAILO_LINK
+#if !defined(TEST_MODE_NO_HAILO_LINK)  && !defined(UDP_AI_DETECTION)
 
 class OutTensor {
 public:

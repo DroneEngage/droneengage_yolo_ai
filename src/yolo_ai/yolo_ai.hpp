@@ -10,8 +10,10 @@
 #ifndef YOLO_AI_H
 #define YOLO_AI_H
 
-#include <set> // Using std::set for efficient lookup of allowed class indices
+#ifndef UDP_AI_DETECTION
 
+#include <set> // Using std::set for efficient lookup of allowed class indices
+#include "yolo_ai_calback.hpp"
 #include "../helpers/json_nlohmann.hpp"
 
 using Json_de = nlohmann::json;
@@ -22,13 +24,7 @@ namespace de
 namespace yolo_ai
 {
 
-class CCallBack_YOLOAI
-{
-    public:
-        virtual void onTrack (const Json_de targets) = 0;
-        virtual void onBestObject (const Json_de targets) = 0;
-        virtual void onTrackStatusChanged (const int& status) = 0;
-};
+
 
 
  class CYOLOAI
@@ -104,3 +100,4 @@ class CCallBack_YOLOAI
 
 #endif
 
+#endif

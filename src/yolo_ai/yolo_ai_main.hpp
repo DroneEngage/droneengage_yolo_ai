@@ -7,7 +7,8 @@
 #include "../de_common/de_common_callback.hpp"
 #include "yolo_ai_facade.hpp"
 #include "yolo_ai.hpp"
-
+#include "yolo_ai_calback.hpp"
+#include "udp_de_object_detection_tracking.hpp"
 
 #include "../helpers/json_nlohmann.hpp"
 using Json_de = nlohmann::json;
@@ -82,6 +83,10 @@ namespace yolo_ai
             {
                 return m_class_names;
             }
+
+        protected:
+
+            void onReceive (ParsedDetection detection);
         
         private:
             
@@ -97,7 +102,6 @@ namespace yolo_ai
             std::string m_output_virtual_video_path;
             std::vector<std::string> m_class_names;
 
-            de::yolo_ai::CYOLOAI& m_yolo_ai = de::yolo_ai::CYOLOAI::getInstance();
             de::yolo_ai::CYOLOAI_Facade& m_trackerFacade = de::yolo_ai::CYOLOAI_Facade::getInstance();
     };
 

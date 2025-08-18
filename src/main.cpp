@@ -82,11 +82,12 @@ void _version (void)
     
     #ifdef TEST_MODE_NO_HAILO_LINK
     std::cout << std::endl << _ERROR_CONSOLE_BOLD_TEXT_ "NO HAILO ACCESS --- VIRTUAL CALLS ONLY " << _NORMAL_CONSOLE_TEXT_ << std::endl;
+    #elif defined (UDP_AI_DETECTION)
+    std::cout << std::endl << _SUCCESS_CONSOLE_BOLD_TEXT_ "Remote UDP AI" << _NORMAL_CONSOLE_TEXT_ << std::endl;
     #else
     std::cout << std::endl << _SUCCESS_CONSOLE_BOLD_TEXT_ "HAILO LINKED " << _NORMAL_CONSOLE_TEXT_ << std::endl;
     #endif
 }
-
 
 /**
  * @brief display hardware serial number.
