@@ -6,3 +6,6 @@ hailort.log
 /bin-rpi64
 /build
 TODOHEFNY.txt
+*.local
+launch.json
+settings.json
