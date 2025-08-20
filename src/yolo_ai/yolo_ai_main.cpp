@@ -7,6 +7,8 @@
 #include "../de_common/configFile.hpp"
 #include "../de_common/messages.hpp"
 
+#include "video.hpp"
+
 #include "yolo_ai_main.hpp"
 
 
