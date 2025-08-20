@@ -22,25 +22,74 @@ bool CYOLOAI_Main::init()
 
 #ifndef UDP_AI_DETECTION
 
-    if (!validateField(jsonConfig, "source_video_device", Json_de::value_t::string))
+    std::string source_video_device = "";
+    std::string output_video_device = "";
+
+    if (jsonConfig.contains("source_video_device_name"))
     {
-        std::cout << _ERROR_CONSOLE_BOLD_TEXT_ << "Fatal Error:" << _NORMAL_CONSOLE_TEXT_ << " Missing field or bad string format " << _INFO_CONSOLE_BOLD_TEXT << " source_video_device " << _NORMAL_CONSOLE_TEXT_<< std::endl;
-        exit(1);
+        const int video_index = CVideo::findVideoDeviceIndex(jsonConfig["source_video_device_name"]);
+        if (video_index != -1) 
+        {
+            source_video_device = "/dev/video" + std::to_string(video_index);
+
+            std::cout << _SUCCESS_CONSOLE_BOLD_TEXT_ << "Using source_video_device_name:" << _INFO_CONSOLE_BOLD_TEXT << source_video_device 
+                    << _NORMAL_CONSOLE_TEXT_
+                    << std::endl;
+        }
     }
 
-    std::string source_video_device = jsonConfig["source_video_device"].get<std::string>();
-
-    std::cout << _SUCCESS_CONSOLE_BOLD_TEXT_ << "Video Capture:" << _INFO_CONSOLE_TEXT << source_video_device << _NORMAL_CONSOLE_TEXT_ << std::endl;
-    
-    if (!validateField(jsonConfig, "output_video_device", Json_de::value_t::string))
+    if (source_video_device.empty())
     {
-        std::cout << _ERROR_CONSOLE_BOLD_TEXT_ << "Fatal Error:" << _NORMAL_CONSOLE_TEXT_ << " Missing field or bad string format " << _INFO_CONSOLE_BOLD_TEXT << " output_video_device " << _NORMAL_CONSOLE_TEXT_<< std::endl;
-        exit(1);
-    }
-    
-    std::string output_video_device = jsonConfig["output_video_device"].get<std::string>();
+        if (!jsonConfig.contains("source_video_device"))
+        {
+            std::cout << _ERROR_CONSOLE_BOLD_TEXT_ << "FATAL ERROR: " << _INFO_CONSOLE_TEXT << CConfigFile::getInstance().getFileName() 
+                    << " does not have field " << _ERROR_CONSOLE_TEXT_ "[source_video_device]" <<  _NORMAL_CONSOLE_TEXT_ 
+                    << std::endl;
+        
+            exit(1);
+        }
+        else
+        {
+            source_video_device = jsonConfig["source_video_device"];
 
-    std::cout << _SUCCESS_CONSOLE_BOLD_TEXT_ << "Video Output: " << _INFO_CONSOLE_TEXT << output_video_device << _NORMAL_CONSOLE_TEXT_ << std::endl;
+            std::cout << _SUCCESS_CONSOLE_BOLD_TEXT_ << "Using source_video_device:" << _INFO_CONSOLE_BOLD_TEXT << source_video_device 
+                    << _NORMAL_CONSOLE_TEXT_
+                    << std::endl;
+        }
+    }
+
+    
+    if (jsonConfig.contains("output_video_device_name"))
+    {
+        const int video_index = CVideo::findVideoDeviceIndex(jsonConfig["output_video_device_name"]);
+        if (video_index != -1) 
+        {
+            output_video_device = "/dev/video" + std::to_string(video_index);
+
+            std::cout << _SUCCESS_CONSOLE_BOLD_TEXT_ << "Using output_video_device_name:" << _INFO_CONSOLE_BOLD_TEXT << output_video_device 
+                    << _NORMAL_CONSOLE_TEXT_
+                    << std::endl;
+
+        }
+    }
+
+    
+    if (output_video_device.empty())
+    {
+        if (!jsonConfig.contains("output_video_device"))
+        {
+            std::cout << _ERROR_CONSOLE_BOLD_TEXT_ << "FATAL ERROR:" << _INFO_CONSOLE_TEXT << " No output_video_device specified in config.json" <<  _NORMAL_CONSOLE_TEXT_ << std::endl;
+            exit(1);
+        }
+        else
+        {
+            output_video_device = jsonConfig["output_video_device"];
+
+            std::cout << _SUCCESS_CONSOLE_BOLD_TEXT_ << "Using output_video_device:" << _INFO_CONSOLE_BOLD_TEXT << output_video_device 
+                    <<   _NORMAL_CONSOLE_TEXT_
+                    << std::endl;
+        }
+    }
     
     if (!validateField(jsonConfig, "model_path", nlohmann::json::value_t::string))
     {
@@ -207,7 +256,9 @@ void CYOLOAI_Main::onReceive (ParsedDetection detection)
         best_object_json["w"] = roundToPrecision(detection.width, 3);
         best_object_json["h"] = roundToPrecision(detection.height, 3);
     onBestObject(best_object_json);
+#ifdef DEBUG
     std::cout << "detection:" << detection.name << ":" << detection.category << std::endl;
+#endif
 }
 
 void CYOLOAI_Main::enableTracking()
