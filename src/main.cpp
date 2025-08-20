@@ -78,7 +78,7 @@ void _versionOnly (void)
  */
 void _version (void)
 {
-    std::cout << std::endl << _SUCCESS_CONSOLE_BOLD_TEXT_ "Drone-Engage Visual TOLO-AI Module " << _INFO_CONSOLE_TEXT << "version " << version_string << _NORMAL_CONSOLE_TEXT_ << std::endl;
+    std::cout << std::endl << _SUCCESS_CONSOLE_BOLD_TEXT_ "Drone-Engage Visual AI-Tracking Module " << _INFO_CONSOLE_TEXT << "version " << version_string << _NORMAL_CONSOLE_TEXT_ << std::endl;
     
     #ifdef TEST_MODE_NO_HAILO_LINK
     std::cout << std::endl << _ERROR_CONSOLE_BOLD_TEXT_ "NO HAILO ACCESS --- VIRTUAL CALLS ONLY " << _NORMAL_CONSOLE_TEXT_ << std::endl;
