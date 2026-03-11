@@ -13,9 +13,9 @@
     
     // Specific Module Parameters
     "source_video_device"         : "/dev/video0",
-    "output_video_device"         : "/dev/video2",
-    "source_video_device_name"    : "DE-CAM1",
-    "output_video_device_name"    : "DE-CAM2",
+    //"output_video_device"         : "/dev/video2",
+    //"source_video_device_name"    : "DE-CAM1",
+    "output_video_device_name"    : "DE-TRK",
     
     // AI-MODEL
     "model_path": "yolov8s.hef",
