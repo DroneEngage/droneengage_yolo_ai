@@ -215,7 +215,7 @@ void CYOLOAI_Main::onTrackStatusChanged (const int& status)
     );
     
 
-    #ifdef DDEBUG
+    #ifdef DEBUG
     std::cout << _INFO_CONSOLE_BOLD_TEXT << "onTrackStatusChanged:" << _LOG_CONSOLE_BOLD_TEXT << std::to_string(status) << _NORMAL_CONSOLE_TEXT_ << std::endl;
     #endif
 }
