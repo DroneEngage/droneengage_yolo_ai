@@ -1,7 +1,44 @@
 #!/bin/bash
+
+# Usage:
+#   ./build.sh [RELEASE] [DEFINE1] [DEFINE2] ... [CMAKE_VAR=VALUE] ...
+# Notes:
+#   - RELEASE sets CMAKE_BUILD_TYPE=RELEASE (default is DEBUG)
+#   - Any bare token like DDEBUG is passed to the compiler as -D<token>
+#   - Any argument containing '=' is passed to CMake as -D<arg> (e.g. FOO=ON)
+#   - TEST_MODE_NO_HAILO_LINK=ON is included by default so this builds on
+#     non-Pi / non-Hailo hosts. Override with TEST_MODE_NO_HAILO_LINK=OFF.
+
+# Default build type is DEBUG
+BUILD_TYPE="DEBUG"
+ADDITIONAL_DEFINES=""
+EXTRA_CFLAGS=""
+
+# Check for RELEASE parameter
+if [ "$1" = "RELEASE" ]; then
+    BUILD_TYPE="RELEASE"
+    shift  # Remove RELEASE from arguments
+fi
+
+# Add any additional defines from remaining parameters
+for arg in "$@"; do
+    case "$arg" in
+        *=*) ADDITIONAL_DEFINES="$ADDITIONAL_DEFINES -D$arg" ;;
+        *)   EXTRA_CFLAGS="$EXTRA_CFLAGS -D$arg" ;;
+    esac
+done
+
+rm -rf ./logs
 rm -rf ./build
 mkdir build
 cd build
-cmake -D CMAKE_BUILD_TYPE=DEBUG -D TEST_MODE_NO_HAILO_LINK:BOOL=ON ../ 
-make
-
+export CFLAGS="$CFLAGS $EXTRA_CFLAGS"
+export CXXFLAGS="$CXXFLAGS $EXTRA_CFLAGS"
+cmake -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DTEST_MODE_NO_HAILO_LINK:BOOL=ON $ADDITIONAL_DEFINES ../
+if make; then
+    if [ -f "./build_success.cmake" ]; then
+        cmake -P "./build_success.cmake"
+    fi
+else
+    exit $?
+fi
