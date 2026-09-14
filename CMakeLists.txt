@@ -141,8 +141,8 @@ SET(EXECUTABLE_OUTPUT_PATH ${OUTPUT_DIRECTORY})
 
 #add_subdirectory(src)
 file(GLOB folder_src "./src/*.cpp")
-file(GLOB folder_helpers "./src/helpers/*.cpp")
-file(GLOB folder_common "./src/de_common/*.cpp")
+file(GLOB folder_common "./src/de_common/de_databus/*.cpp")
+file(GLOB folder_common1 "./src/de_common/helpers/*.cpp")
 file(GLOB folder_ai "./src/yolo_ai/*.cpp")
 
 # Define an option for user control over DETAILED_DEBUG
@@ -152,7 +152,7 @@ option(HAILO_AI_DETECTION "SOURCE: HAILO Board" ON) # Default is OFF
 option(TEST_MODE_NO_HAILO_LINK "SOURCE: FAKE SOURCE - Do not link to Hailo LIB" OFF) # Default is OFF
 
 
-set(files ${folder_src} ${folder_common} ${folder_ai} ${folder_helpers})
+set(files ${folder_src} ${folder_common} ${folder_common1} ${folder_ai})
 
 include_directories(${OpenCV_INCLUDE_DIRS}) # Add OpenCV include directories
 

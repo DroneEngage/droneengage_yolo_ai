@@ -1,7 +1,7 @@
 #ifndef YOLO_AI_CALLBACK_H
 #define YOLO_AI_CALLBACK_H
 
-#include "../helpers/json_nlohmann.hpp"
+#include "../de_common/helpers/json_nlohmann.hpp"
 
 using Json_de = nlohmann::json;
 
