@@ -289,6 +289,7 @@ void init (int argc, char *argv[])
 void uninit ()
 {
     cYOLOAI_Main.uninit();
+    cModule.uninit();
 	m_exit = true;
 
     // end program here
