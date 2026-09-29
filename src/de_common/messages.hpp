@@ -431,3 +431,17 @@
 #define TrackingTarget_STATUS_AI_Recognition_ENABLED        2
 #define TrackingTarget_STATUS_AI_Recognition_DISABLED       3
 #define TrackingTarget_STATUS_AI_Recognition_CLASS_LIST     4
+
+// TYPE_AndruavMessage_MODULE_CAPABILITIES
+// Phase-3 capability advert push/fetch: {caps:[string...], ch:string}
+// module->de_comm; request: {r:true} de_comm->module
+#define TYPE_AndruavMessage_MODULE_CAPABILITIES              6542
+// TYPE_AndruavMessage_CAPABILITY_INVOKE
+// {id, ns, act, p?, dl?} de_comm -> owner module; idempotent by "id"
+#define TYPE_AndruavMessage_CAPABILITY_INVOKE                6543
+// TYPE_AndruavMessage_CAPABILITY_RESULT
+// {id, ok, err?, data?} module -> de_comm
+#define TYPE_AndruavMessage_CAPABILITY_RESULT                6544
+// TYPE_AndruavMessage_MODULE_STATE
+// {ns, s:{...}, full?} module -> de_comm
+#define TYPE_AndruavMessage_MODULE_STATE                     6545

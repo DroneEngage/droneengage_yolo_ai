@@ -3,12 +3,29 @@
 
 
 #include <ctime>
+#include <deque>
+#include <functional>
 #include <iostream>
+#include <map>
+#include <mutex>
+#include <set>
+#include <vector>
 
 #include "../helpers/json_nlohmann.hpp"
 #include "udpClient.hpp"
 #include "messages.hpp"
 using Json_de = nlohmann::json;
+
+/**
+ * @brief Phase-3 capability invoke handler (de.cap/1). The handler runs on
+ * a worker thread and returns a JSON result payload; set `err` for failure.
+ * `id` is the invoke id so asynchronous work can tag related events.
+ */
+typedef std::function<Json_de(const std::string& id,
+                              const std::string& ns,
+                              const std::string& act,
+                              const Json_de& params,
+                              std::string& err)> CapabilityInvokeHandler;
 
 typedef enum {
     HARDWARE_TYPE_UNDEFINED     = 0,
@@ -188,7 +205,44 @@ namespace comm
         public:
 
             void appendExtraField(const std::string name, const Json_de& ms);
-        
+
+        public:
+
+            // ---- Phase-3 capability helper ("de.cap/1") ----
+            // See Tasks/mission_planner/Phase-3-Tasks/CAPABILITY_SCHEMA.md
+            // and PROTOCOL.md for the dialect and wire messages (6542-6545).
+
+            /**
+             * @brief declare the module's capability adverts. Validates each
+             * advert, folds the advert hash into the module ID ("ch" extra
+             * field) and pushes the adverts once registered. Adding
+             * 6542/6543 to the message filter is the caller's job (or they
+             * are already in MESSAGE_FILTER).
+             * @return false when an advert fails validation
+             */
+            bool setCapabilities (const std::vector<std::string>& adverts);
+
+            /// register the invoke handler; one handler per module - it
+            /// dispatches on <ns>.<act>
+            void onInvoke (CapabilityInvokeHandler handler);
+
+            /// MODULE_STATE (6545): publish a state fragment for a namespace
+            void publishState (const std::string& ns, const Json_de& changed, const bool full = false);
+
+            /// fire a capability event via Sync_EventFire (1061):
+            /// {"d": "<ns>.<ev>", "ed": payload, "n": "<ms>-<counter>"}
+            void fireEvent (const std::string& ns, const std::string& ev, const Json_de& payload);
+
+        private:
+
+            void sendCapabilities ();
+            void sendInvokeResult (const Json_de& result);
+            void cacheInvokeResult (const std::string& id, const Json_de& result);
+            void runInvokeOnWorker (const std::string& id, const std::string& ns,
+                                    const std::string& act, const Json_de& params,
+                                    const double deadline_s);
+            void handleCapabilityInvoke (const Json_de& cmd);
+
         protected:
             std::map <std::string,Json_de> m_stdinValues;
             
@@ -253,7 +307,19 @@ namespace comm
             Json_de m_message_filter;
 
             void (*m_OnReceive)(const char *, int len, Json_de jMsg) = nullptr;
-            
+
+            // Phase-3 capability state
+            std::vector<std::string> m_capability_adverts;
+            std::vector<Json_de>     m_capability_parsed;
+            std::string              m_capability_hash;
+            bool                     m_capabilities_sent = false;
+            CapabilityInvokeHandler  m_onInvoke = nullptr;
+            std::map<std::string, Json_de> m_invoke_results;
+            std::deque<std::string>  m_invoke_order;
+            std::set<std::string>    m_invoke_inflight;
+            uint32_t                 m_event_counter = 0;
+            std::mutex               m_cap_lock;
+
             std::mutex m_lock;
 
     };

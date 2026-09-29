@@ -22,7 +22,9 @@
 using Json_de = nlohmann::json;
 
 #define MESSAGE_FILTER {TYPE_AndruavMessage_AI_Recognition_ACTION,\
-                        TYPE_AndruavMessage_AI_Recognition_STATUS\
+                        TYPE_AndruavMessage_AI_Recognition_STATUS,\
+                        TYPE_AndruavMessage_MODULE_CAPABILITIES,\
+                        TYPE_AndruavMessage_CAPABILITY_INVOKE\
                         }
 
 // This is a timestamp used as instance unique number. if changed then communicator module knows module has restarted.
@@ -223,6 +225,9 @@ void initDEModule(int argc, char *argv[])
     cModule.addModuleFeatures(MODULE_FEATURE_AI_RECOGNITION);
     cModule.setHardware(hardware_serial, ENUM_HARDWARE_TYPE::HARDWARE_TYPE_CPU);
     cModule.setMessageOnReceive (&onReceive);
+
+    // P3-07: advertise the visual_tracker namespace (start/stop)
+    cYOLOAI_Main.setupCapabilities();
 
     int udp_chunk_size = DEFAULT_UDP_DATABUS_PACKET_SIZE;
     

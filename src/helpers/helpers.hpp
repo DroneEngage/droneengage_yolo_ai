@@ -13,6 +13,10 @@
 using Json_de = nlohmann::json;
 
 uint64_t get_time_usec();
+// Monotonic clock: get_time_usec() uses gettimeofday and can step backward
+// on NTP/RTC corrections, which would underflow a uint64 diff. Same clock
+// domain as PRECLAND_TARGET.t / the 1078 "tm" field.
+uint64_t get_time_usec_monotonic();
 
 int wait_time_nsec (const time_t& seconds, const long& nano_seconds);
 

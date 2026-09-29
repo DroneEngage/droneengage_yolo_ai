@@ -441,6 +441,11 @@ while (!m_exit_thread) {
                             best_object_json["y"] = roundToPrecision(ymin_norm, 3);
                             best_object_json["w"] = roundToPrecision(xmax_norm - xmin_norm, 3);
                             best_object_json["h"] = roundToPrecision(ymax_norm - ymin_norm, 3);
+                            // P3-07: confidence + capture time (CLOCK_MONOTONIC
+                            // us, same domain as PRECLAND_TARGET.t) so de_mavlink
+                            // can time-align the frame with its pose buffer
+                            best_object_json["conf"] = roundToPrecision(confidence, 3);
+                            best_object_json["tm"] = get_time_usec_monotonic();
                             best_bbox = cv::Rect(x1, y1, x2 - x1, y2 - y1);
                         } else {
                             const cv::Scalar color = cv::Scalar(0, 200, 0);
