@@ -91,8 +91,8 @@ SET(EXECUTABLE_OUTPUT_PATH ${OUTPUT_DIRECTORY})
 
 #add_subdirectory(src)
 file(GLOB folder_src "./src/*.cpp")
-file(GLOB folder_helpers "./src/helpers/*.cpp")
-file(GLOB folder_common "./src/de_common/*.cpp")
+file(GLOB folder_helpers "./src/de_common/helpers/*.cpp")
+file(GLOB folder_common "./src/de_common/de_databus/*.cpp")
 file(GLOB folder_ai "./src/yolo_ai/*.cpp")
 
 # Define an option for user control over DETAILED_DEBUG

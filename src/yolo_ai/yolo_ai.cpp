@@ -9,8 +9,8 @@
 #include <algorithm>  // For std::sort
 #include <memory>     // For std::unique_ptr, std::shared_ptr
 #include <opencv2/opencv.hpp>
-#include "../helpers/colors.hpp"
-#include "../helpers/helpers.hpp"
+#include "../de_common/helpers/colors.hpp"
+#include "../de_common/helpers/helpers.hpp"
 
 #include "../defines.hpp"
 
@@ -21,7 +21,7 @@
 #include <hailo/infer_model.hpp>
 #endif
 
-#include "../de_common/messages.hpp"
+#include "../de_common/de_databus/messages.hpp"
 
 // Headers for V4L2
 #include <fcntl.h>

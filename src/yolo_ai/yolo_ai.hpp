@@ -14,7 +14,7 @@
 
 #include <set> // Using std::set for efficient lookup of allowed class indices
 #include "yolo_ai_calback.hpp"
-#include "../helpers/json_nlohmann.hpp"
+#include "../de_common/helpers/json_nlohmann.hpp"
 
 using Json_de = nlohmann::json;
 

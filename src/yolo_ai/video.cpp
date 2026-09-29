@@ -15,7 +15,7 @@
 #include <linux/videodev2.h>
 
 
-#include "../helpers/colors.hpp"
+#include "../de_common/helpers/colors.hpp"
 
 #include "video.hpp"
 

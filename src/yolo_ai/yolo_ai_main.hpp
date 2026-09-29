@@ -4,13 +4,13 @@
 
 #include <thread>         // std::thread
 
-#include "../de_common/de_common_callback.hpp"
+#include "../de_common/de_databus/de_common_callback.hpp"
 #include "yolo_ai_facade.hpp"
 #include "yolo_ai.hpp"
 #include "yolo_ai_calback.hpp"
 #include "udp_de_object_detection_tracking.hpp"
 
-#include "../helpers/json_nlohmann.hpp"
+#include "../de_common/helpers/json_nlohmann.hpp"
 using Json_de = nlohmann::json;
 
 

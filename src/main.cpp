@@ -2,22 +2,22 @@
 #include <signal.h>
 #include <iostream>
 
-#include "./helpers/colors.hpp"
-#include "./helpers/helpers.hpp"
-#include "./helpers/getopt_cpp.hpp"
-#include "./helpers/util_rpi.hpp"
+#include "./de_common/helpers/colors.hpp"
+#include "./de_common/helpers/helpers.hpp"
+#include "./de_common/helpers/getopt_cpp.hpp"
+#include "./de_common/helpers/util_rpi.hpp"
 #include "version.hpp"
 #include "defines.hpp"
-#include "./de_common/messages.hpp"
-#include "./de_common/configFile.hpp"
-#include "./de_common/localConfigFile.hpp"
-#include "./de_common/udpClient.hpp"
-#include "./de_common/de_module.hpp"
+#include "./de_common/de_databus/messages.hpp"
+#include "./de_common/de_databus/configFile.hpp"
+#include "./de_common/de_databus/localConfigFile.hpp"
+#include "./de_common/de_databus/udpClient.hpp"
+#include "./de_common/de_databus/de_module.hpp"
 #include "yolo_ai/yolo_ai_main.hpp"
 #include "yolo_ai/yolo_ai_parser.hpp"
 
 
-#include "./helpers/json_nlohmann.hpp"
+#include "./de_common/helpers/json_nlohmann.hpp"
 
 using Json_de = nlohmann::json;
 

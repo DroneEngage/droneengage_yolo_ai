@@ -5,7 +5,7 @@
 #include "./yolo_ai_main.hpp"
 #include "./yolo_ai_facade.hpp"
 
-#include "../helpers/json_nlohmann.hpp"
+#include "../de_common/helpers/json_nlohmann.hpp"
 
 using Json_de = nlohmann::json;
 

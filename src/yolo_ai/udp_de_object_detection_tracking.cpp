@@ -12,7 +12,7 @@
 #include <cstring>       // For memset, used for memory operations
 #include <stdexcept>     // For std::runtime_error
 
-#include "../helpers/colors.hpp"
+#include "../de_common/helpers/colors.hpp"
 
 #include "udp_de_object_detection_tracking.hpp"
 

@@ -1,4 +1,4 @@
-#include "../helpers/colors.hpp"
+#include "../de_common/helpers/colors.hpp"
 #include "yolo_ai_facade.hpp"
 
 #include "yolo_ai_main.hpp"
