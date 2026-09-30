@@ -69,15 +69,6 @@ namespace yolo_ai
             void disableTracking();
             void pauseTracking();
             void enableTracking();
-
-        public:
-            // Phase-3: advertise "visual_tracker" (start/stop) + invoke handler
-            void setupCapabilities ();
-            Json_de onCapabilityInvoke (const std::string& id,
-                                        const std::string& ns,
-                                        const std::string& act,
-                                        const Json_de& params,
-                                        std::string& err);
             
         public:
             //CCallBack_Tracker
@@ -103,7 +94,6 @@ namespace yolo_ai
             bool m_exit_thread;
 
             int m_ai_tracker_status = TrackingTarget_STATUS_AI_Recognition_DISABLED;
-            bool m_caps_advertised = false;
             
             std::thread m_threadSenderID;
 

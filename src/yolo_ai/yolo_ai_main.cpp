@@ -9,27 +9,12 @@
 
 #include "video.hpp"
 
-#include "../version.hpp"
 #include "yolo_ai_main.hpp"
 
 
 
 
 using namespace de::yolo_ai;
-
-// AI_Recognition_STATUS (1077) code -> capability state string
-static const char* aiStateName (const int status)
-{
-    switch (status)
-    {
-        case TrackingTarget_STATUS_AI_Recognition_LOST:      return "lost";
-        case TrackingTarget_STATUS_AI_Recognition_DETECTED:  return "detected";
-        case TrackingTarget_STATUS_AI_Recognition_ENABLED:   return "enabled";
-        case TrackingTarget_STATUS_AI_Recognition_DISABLED:  return "disabled";
-        default:                                             return "disabled";
-    }
-}
-
 
 bool CYOLOAI_Main::init()
 {
@@ -228,12 +213,6 @@ void CYOLOAI_Main::onTrackStatusChanged (const int& status)
         status
     );
 
-    // P3-07: mirror into the visual_tracker capability state
-    if (m_caps_advertised)
-    {
-        de::comm::CModule::getInstance().publishState("visual_tracker",
-            {{"ai", aiStateName(status)}});
-    }
     
 
     #ifdef DDEBUG
@@ -298,124 +277,4 @@ void CYOLOAI_Main::enableTracking()
         std::string(""),
         m_ai_tracker_status
     );
-
-    if (m_caps_advertised)
-    {
-        de::comm::CModule::getInstance().publishState("visual_tracker",
-            {{"ai", aiStateName(m_ai_tracker_status)}});
-    }
-}
-
-
-// ---------------------------------------------------------------------------
-// Phase-3 capability advert "visual_tracker" (TASK-P3-07).
-// start/stop map to the same handlers the legacy AI_Recognition_ACTION (1076)
-// parser uses; de_tracker advertises "track" under the same namespace.
-// ---------------------------------------------------------------------------
-
-void CYOLOAI_Main::setupCapabilities ()
-{
-    de::comm::CModule& cModule = de::comm::CModule::getInstance();
-
-    // start {class}: an enum of the configured class list when it is known,
-    // a plain string otherwise (class_names come from the config file)
-    Json_de class_param = {{"type", "string"}, {"desc", "class to search for"}};
-    if (!m_class_names.empty())
-    {
-        class_param = {{"type", "enum"}, {"values", m_class_names}};
-    }
-
-    const Json_de advert =
-    {
-        {"schema",  "de.cap/1"},
-        {"ns",      "visual_tracker"},
-        {"module",  "droneengage_yolo_ai"},
-        {"ver",     std::string(version_string)},
-        {"actions", {
-            {"start", {
-                {"desc", "Enable AI recognition and search for a class"},
-                {"params", {
-                    {"class", class_param}
-                }}
-            }},
-            {"stop", {
-                {"desc", "Disable AI recognition"}
-            }}
-        }},
-        {"state", {
-            {"ai", {{"type", "enum"},
-                    {"values", {"lost", "detected", "enabled", "disabled"}},
-                    {"desc", "AI_Recognition_STATUS mirror"}}}
-        }}
-    };
-
-    if (!cModule.setCapabilities({advert.dump()}))
-    {
-        std::cout << _ERROR_CONSOLE_BOLD_TEXT_ << "capability advert rejected for ns visual_tracker" << _NORMAL_CONSOLE_TEXT_ << std::endl;
-        return;
-    }
-
-    cModule.onInvoke([this](const std::string& id, const std::string& ns,
-                            const std::string& act, const Json_de& params,
-                            std::string& err) -> Json_de
-    {
-        return onCapabilityInvoke(id, ns, act, params, err);
-    });
-
-    m_caps_advertised = true;
-}
-
-
-Json_de CYOLOAI_Main::onCapabilityInvoke (const std::string& id,
-                                        const std::string& ns,
-                                        const std::string& act,
-                                        const Json_de& params,
-                                        std::string& err)
-{
-    (void) id;
-
-    if (ns != "visual_tracker")
-    {
-        err = "unknown namespace " + ns;
-        return Json_de::object();
-    }
-
-    if (act == "start")
-    {
-        const std::string cls = params.value("class", "");
-        if (cls.empty())
-        {
-            err = "missing class";
-            return Json_de::object();
-        }
-
-        // resolve the class name to its index in the configured list
-        int index = -1;
-        for (size_t i = 0; i < m_class_names.size(); ++i)
-        {
-            if (m_class_names[i] == cls) { index = (int) i; break; }
-        }
-        if (index < 0)
-        {
-            err = "unknown class '" + cls + "'";
-            return Json_de::object();
-        }
-
-        // same path as AI_Recognition_ACTION ENABLE + SEARCH (1076)
-        enableTracking();
-        startTrackingObjects(Json_de::array({index}));
-        // let de_mavlink's detect projector map the selected index to a name
-        m_trackerFacade.sendTrackingClassesList(std::string(""));
-        return {{"started", true}, {"class", cls}, {"index", index}};
-    }
-
-    if (act == "stop")
-    {
-        // same path as AI_Recognition_ACTION DISABLE (1076)
-        disableTracking();
-        return {{"stopped", true}};
-    }
-
-    err = "unknown action " + ns + "." + act;
-    return Json_de::object();
 }
