@@ -1,4 +1,4 @@
-# AGENTS.md — drone_engage_yolo_ai
+# AGENTS.md — droneengage_yolo_ai
 
 DroneEngage YOLO AI detector (`de_ai`, binary `de_ai_tracker.so`).
 Runs YOLOv8 inference for object detection on a Raspberry Pi 5 with a
