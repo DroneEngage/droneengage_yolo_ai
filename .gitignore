@@ -9,3 +9,5 @@ TODOHEFNY.txt
 *.local
 launch.json
 settings.json
+src/test/*.o
+src/test/test_yolo_best_box

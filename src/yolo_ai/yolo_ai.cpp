@@ -11,6 +11,7 @@
 #include <opencv2/opencv.hpp>
 #include "../de_common/helpers/colors.hpp"
 #include "../de_common/helpers/helpers.hpp"
+#include "yolo_ai_best_box.hpp"
 
 #include "../defines.hpp"
 
@@ -436,11 +437,13 @@ while (!m_exit_thread) {
                         std::string label_text;
                         if (best_score < 0 || score > best_score) {
                             best_score = score;
-                            best_object_json = Json_de::object();
-                            best_object_json["x"] = roundToPrecision(xmin_norm, 3);
-                            best_object_json["y"] = roundToPrecision(ymin_norm, 3);
-                            best_object_json["w"] = roundToPrecision(xmax_norm - xmin_norm, 3);
-                            best_object_json["h"] = roundToPrecision(ymax_norm - ymin_norm, 3);
+                            // B4-01: the box carries the detector's class
+                            // and confidence
+                            best_object_json = yoloBestBoxJson(
+                                xmin_norm, ymin_norm,
+                                xmax_norm - xmin_norm,
+                                ymax_norm - ymin_norm,
+                                confidence, (int) classIdx, m_class_names);
                             best_bbox = cv::Rect(x1, y1, x2 - x1, y2 - y1);
                         } else {
                             const cv::Scalar color = cv::Scalar(0, 200, 0);

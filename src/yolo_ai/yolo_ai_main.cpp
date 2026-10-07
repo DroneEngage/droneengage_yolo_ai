@@ -8,7 +8,7 @@
 #include "../de_common/de_databus/messages.hpp"
 
 #include "video.hpp"
-
+#include "yolo_ai_best_box.hpp"
 #include "yolo_ai_main.hpp"
 
 
@@ -252,11 +252,10 @@ void CYOLOAI_Main::pauseTracking()
 
 void CYOLOAI_Main::onReceive (ParsedDetection detection)
 {
-    Json_de best_object_json = Json_de::object();
-        best_object_json["x"] = roundToPrecision(detection.x, 3);
-        best_object_json["y"] = roundToPrecision(detection.y, 3);
-        best_object_json["w"] = roundToPrecision(detection.width, 3);
-        best_object_json["h"] = roundToPrecision(detection.height, 3);
+    // B4-01: keep the detector's class + confidence on the wire
+    const Json_de best_object_json = yoloBestBoxJson(
+        detection.x, detection.y, detection.width, detection.height,
+        detection.confidence, (int) detection.category, detection.name);
     onBestObject(best_object_json);
 #ifdef DEBUG
     std::cout << "detection:" << detection.name << ":" << detection.category << std::endl;
