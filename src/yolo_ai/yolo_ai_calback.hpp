@@ -16,6 +16,8 @@ class CCallBack_YOLOAI
         virtual void onTrack (const Json_de targets) = 0;
         virtual void onBestObject (const Json_de targets) = 0;
         virtual void onTrackStatusChanged (const int& status) = 0;
+        virtual void onCameraOverlayDetections (const Json_de overlay_detections) = 0;
+        virtual void onCameraOverlayRemove () = 0;
 };
 }
 }

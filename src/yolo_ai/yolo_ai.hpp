@@ -74,12 +74,22 @@ namespace yolo_ai
 
             void loadAllowedClassIndices(const Json_de& json_array);
 
+            void setCameraDraw(const bool de_camera_draw);
+            void setAdvancedTrackingParameters(const int frames_to_skip_between_messages,
+                                               const bool de_camera_draw);
 
         private:
-            
+
+            void clearCameraOverlayShapes();
+
+        private:
+
             bool m_exit_thread;
             bool m_is_AI_yolo_active_initial = false;
             bool m_object_found = false;
+            bool m_de_camera_draw = false;
+            bool m_overlay_shapes_drawn = false;
+            int  m_frames_to_skip_between_messages = 3;
 
             std::string m_source_video_device;
             std::string m_output_video_device;

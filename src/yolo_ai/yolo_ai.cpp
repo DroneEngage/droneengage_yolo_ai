@@ -87,6 +87,7 @@ void CYOLOAI::pause()
 {
     std::cout << "pause" <<std::endl;
     m_is_AI_yolo_active_initial = false;
+    clearCameraOverlayShapes();
 
     if (m_callback_yolo_ai != nullptr)
     {
@@ -97,13 +98,42 @@ void CYOLOAI::pause()
 
 void CYOLOAI::stop()
 {
-    if (m_exit_thread) return ; 
+    if (m_exit_thread) return ;
     m_exit_thread = true;
-    
+    clearCameraOverlayShapes();
+
     if (m_callback_yolo_ai != nullptr)
     {
         m_callback_yolo_ai->onTrackStatusChanged(TrackingTarget_STATUS_AI_Recognition_DISABLED);
     }
+}
+
+
+void CYOLOAI::setCameraDraw(const bool de_camera_draw)
+{
+    if (!de_camera_draw)
+    {
+        clearCameraOverlayShapes();
+    }
+    m_de_camera_draw = de_camera_draw;
+}
+
+
+void CYOLOAI::setAdvancedTrackingParameters(const int frames_to_skip_between_messages,
+                                            const bool de_camera_draw)
+{
+    m_frames_to_skip_between_messages = frames_to_skip_between_messages <= 0 ? 1 : frames_to_skip_between_messages;
+    setCameraDraw(de_camera_draw);
+}
+
+
+void CYOLOAI::clearCameraOverlayShapes()
+{
+    if (m_overlay_shapes_drawn && m_callback_yolo_ai != nullptr)
+    {
+        m_callback_yolo_ai->onCameraOverlayRemove();
+    }
+    m_overlay_shapes_drawn = false;
 }
 
 
@@ -377,6 +407,8 @@ while (!m_exit_thread) {
 
             bool object_found = false;
             Json_de object_found_list = Json_de::array();
+            Json_de overlay_list = Json_de::array();
+            int best_overlay_index = -1;
 
             for (size_t classIdx = 0; classIdx < numClasses; ++classIdx) {
                 if (!m_allowed_class_indices.empty() && m_allowed_class_indices.find(classIdx) == m_allowed_class_indices.end()) {
@@ -435,7 +467,8 @@ while (!m_exit_thread) {
                         const int y2 = static_cast<int>(ymax_norm * scale_y);
 
                         std::string label_text;
-                        if (best_score < 0 || score > best_score) {
+                        const bool is_new_best = (best_score < 0 || score > best_score);
+                        if (is_new_best) {
                             best_score = score;
                             // B4-01: the box carries the detector's class
                             // and confidence
@@ -445,7 +478,7 @@ while (!m_exit_thread) {
                                 ymax_norm - ymin_norm,
                                 confidence, (int) classIdx, m_class_names);
                             best_bbox = cv::Rect(x1, y1, x2 - x1, y2 - y1);
-                        } else {
+                        } else if (!m_de_camera_draw) {
                             const cv::Scalar color = cv::Scalar(0, 200, 0);
                             cv::rectangle(original_bgr_frame, cv::Point(x1, y1), cv::Point(x2, y2), color, 2);
                         }
@@ -454,10 +487,12 @@ while (!m_exit_thread) {
                                      cv::format("%s: %.2f", m_class_names[classIdx].c_str(), confidence) :
                                      cv::format("Class %zu: %.2f", classIdx, confidence);
 
-                        int baseline = 0;
-                        cv::getTextSize(label_text, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseline);
-                        cv::putText(original_bgr_frame, label_text, cv::Point(x1, y1 - 5),
-                                    cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0), 1);
+                        if (!m_de_camera_draw) {
+                            int baseline = 0;
+                            cv::getTextSize(label_text, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseline);
+                            cv::putText(original_bgr_frame, label_text, cv::Point(x1, y1 - 5),
+                                        cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0), 1);
+                        }
 
                         object_found_list.push_back({
                             {"x", roundToPrecision(xmin_norm, 3)},
@@ -465,6 +500,16 @@ while (!m_exit_thread) {
                             {"w", roundToPrecision(xmax_norm - xmin_norm, 3)},
                             {"h", roundToPrecision(ymax_norm - ymin_norm, 3)}
                         });
+
+                        overlay_list.push_back({
+                            {"x", roundToPrecision(xmin_norm, 3)},
+                            {"y", roundToPrecision(ymin_norm, 3)},
+                            {"w", roundToPrecision(xmax_norm - xmin_norm, 3)},
+                            {"h", roundToPrecision(ymax_norm - ymin_norm, 3)},
+                            {"label", label_text},
+                            {"best", false}
+                        });
+                        if (is_new_best) best_overlay_index = (int)overlay_list.size() - 1;
                     }
                     current_idx += 5; // Move to the next box
                 }
@@ -472,7 +517,9 @@ while (!m_exit_thread) {
 
             // Draw the best box in black if it exists
             if (!best_object_json.empty()) {
-                cv::rectangle(original_bgr_frame, best_bbox, cv::Scalar(0, 0, 0), 2);
+                if (!m_de_camera_draw) {
+                    cv::rectangle(original_bgr_frame, best_bbox, cv::Scalar(0, 0, 0), 2);
+                }
                 m_callback_yolo_ai->onBestObject(best_object_json);
                 m_prev_best_object_json = best_object_json; // Update previous best object for next frame
             } else {
@@ -496,6 +543,26 @@ while (!m_exit_thread) {
             if (object_found) {
                 m_callback_yolo_ai->onTrack(object_found_list);
                 object_found_list.clear();
+            }
+
+            if (m_de_camera_draw) {
+                // Detection boxes are drawn by de_camera's overlay library on
+                // the streamed frame instead of painting them on the output
+                // frame. Sent on the messaging cadence; every update is a
+                // full SET_SHAPE batch so de_camera recovers the shapes after
+                // a restart or a CLEAR.
+                const bool should_skip_overlay = (frame_counter % m_frames_to_skip_between_messages) != 0;
+                if (!should_skip_overlay && m_callback_yolo_ai != nullptr) {
+                    if (!overlay_list.empty()) {
+                        if (best_overlay_index >= 0) {
+                            overlay_list[best_overlay_index]["best"] = true;
+                        }
+                        m_callback_yolo_ai->onCameraOverlayDetections(overlay_list);
+                        m_overlay_shapes_drawn = true;
+                    } else {
+                        clearCameraOverlayShapes();
+                    }
+                }
             }
         } else {
             std::cout << "Info: NMS on CPU is not implemented or NMS output structure is different." << std::endl;

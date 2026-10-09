@@ -75,6 +75,8 @@ namespace yolo_ai
             void onTrack (const Json_de targets) override ;
             void onBestObject (const Json_de targets) override ;
             void onTrackStatusChanged (const int& track) override ;
+            void onCameraOverlayDetections (const Json_de overlay_detections) override ;
+            void onCameraOverlayRemove () override ;
 
         
         public:
@@ -94,6 +96,10 @@ namespace yolo_ai
             bool m_exit_thread;
 
             int m_ai_tracker_status = TrackingTarget_STATUS_AI_Recognition_DISABLED;
+
+            bool m_de_camera_draw = false;
+            int  m_frames_to_skip_between_messages = 3;
+            uint32_t m_overlay_send_counter = 0;
             
             std::thread m_threadSenderID;
 

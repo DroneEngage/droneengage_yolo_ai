@@ -55,11 +55,14 @@ namespace yolo_ai
             void sendTrackingBestTargetsLocation(const std::string& target_party_id, const Json_de targets_location) const;
             void sendTrackingClassesList(const std::string& target_party_id);
             void sendTrackingTargetStatus(const std::string& target_party_id, const int status) const;
-        
-        
+            void sendCameraOverlayDetections(const std::string& target_party_id, const Json_de overlay_detections) const;
+            void sendCameraOverlayRemove(const std::string& target_party_id) const;
+
+
         private:
 
-            
+            mutable int m_overlay_drawn_count = 0;
+
     };
 }
 }

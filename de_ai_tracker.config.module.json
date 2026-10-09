@@ -9,8 +9,15 @@
     "s2s_udp_listening_port": "60054", 
     "s2s_udp_packet_size": "8192",
 
-    
-    
+
+    // Advanced Parameters:
+    "advanced_tracking": {
+        "frames_to_skip_between_messages": 3, //optional default: 3
+        // when true the detection boxes are sent to de_camera to draw them
+        // using its internal overlay library instead of drawing them locally
+        "de_camera_draw": true //optional default: false
+    },
+
     // Specific Module Parameters
     "source_video_device"         : "/dev/video0",
     //"output_video_device"         : "/dev/video2",

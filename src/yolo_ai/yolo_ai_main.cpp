@@ -122,7 +122,31 @@ bool CYOLOAI_Main::init()
         }
     
     std::cout << _SUCCESS_CONSOLE_BOLD_TEXT_ << "class_names: " << _INFO_CONSOLE_TEXT << "filled." << _NORMAL_CONSOLE_TEXT_ << std::endl;
-    
+
+    m_de_camera_draw = false;
+    m_frames_to_skip_between_messages = 3;
+
+    if (jsonConfig.contains("advanced_tracking"))
+    {
+        const Json_de advanced_tracking = jsonConfig["advanced_tracking"];
+
+        if (advanced_tracking.contains("de_camera_draw"))
+        {
+            m_de_camera_draw = advanced_tracking["de_camera_draw"].get<bool>();
+        }
+
+        if (advanced_tracking.contains("frames_to_skip_between_messages"))
+        {
+            m_frames_to_skip_between_messages = advanced_tracking["frames_to_skip_between_messages"].get<int>();
+        }
+        m_frames_to_skip_between_messages = m_frames_to_skip_between_messages <= 0 ? 1 : m_frames_to_skip_between_messages;
+    }
+
+    std::cout << _LOG_CONSOLE_BOLD_TEXT
+              << "Using de_camera_draw:" << _INFO_CONSOLE_BOLD_TEXT
+              << m_de_camera_draw << _NORMAL_CONSOLE_TEXT_
+              << std::endl;
+
 #ifdef UDP_AI_DETECTION
     de::yolo_ai::CUDP_AI_Receiver& m_udp_ai_receiver = de::yolo_ai::CUDP_AI_Receiver::getInstance();
     int port = jsonConfig.contains("external_ai_feed_port")
@@ -135,8 +159,9 @@ bool CYOLOAI_Main::init()
 
 #else
     de::yolo_ai::CYOLOAI& m_yolo_ai = de::yolo_ai::CYOLOAI::getInstance();
-            
+
     m_yolo_ai.init(source_video_device, model_path, output_video_device, m_class_names, this);
+    m_yolo_ai.setAdvancedTrackingParameters(m_frames_to_skip_between_messages, m_de_camera_draw);
     m_threadSenderID = std::thread {[&](){ m_yolo_ai.run();}};
 #endif
 
@@ -205,7 +230,7 @@ void CYOLOAI_Main::onBestObject (const Json_de targets)
 /**
  * Called once trackig status changed.
  */
-void CYOLOAI_Main::onTrackStatusChanged (const int& status)  
+void CYOLOAI_Main::onTrackStatusChanged (const int& status)
 {
     m_ai_tracker_status = status;
 
@@ -213,11 +238,35 @@ void CYOLOAI_Main::onTrackStatusChanged (const int& status)
         std::string(""),
         status
     );
-    
+
 
     #ifdef DEBUG
     std::cout << _INFO_CONSOLE_BOLD_TEXT << "onTrackStatusChanged:" << _LOG_CONSOLE_BOLD_TEXT << std::to_string(status) << _NORMAL_CONSOLE_TEXT_ << std::endl;
     #endif
+}
+
+/**
+ * Called by CYOLOAI when de_camera_draw is enabled and the detection set is
+ * updated. overlay_detections is an array of {x,y,w,h normalized [0..1],
+ * label, best} forwarded to de_camera's overlay.
+ */
+void CYOLOAI_Main::onCameraOverlayDetections (const Json_de overlay_detections)
+{
+    m_trackerFacade.sendCameraOverlayDetections (
+        std::string(""),
+        overlay_detections
+    );
+}
+
+/**
+ * Called by CYOLOAI when the detection overlay shapes should be removed
+ * from de_camera (detections lost, paused, stopped, or draw mode disabled).
+ */
+void CYOLOAI_Main::onCameraOverlayRemove ()
+{
+    m_trackerFacade.sendCameraOverlayRemove (
+        std::string("")
+    );
 }
     
  void CYOLOAI_Main::startTrackingObjects(const Json_de& allowed_class_indices)
@@ -260,6 +309,30 @@ void CYOLOAI_Main::onReceive (ParsedDetection detection)
 #ifdef DEBUG
     std::cout << "detection:" << detection.name << ":" << detection.category << std::endl;
 #endif
+
+    // UDP-fed detections carry no local video frames, so de_camera_draw sends
+    // the box straight to de_camera's overlay (single best detection, on the
+    // messaging cadence).
+    if (m_de_camera_draw &&
+        (m_overlay_send_counter++ % m_frames_to_skip_between_messages) == 0)
+    {
+        if (detection.width > 0 && detection.height > 0)
+        {
+            Json_de overlay_detections = Json_de::array();
+            overlay_detections.push_back({
+                {"x", detection.x},
+                {"y", detection.y},
+                {"w", detection.width},
+                {"h", detection.height},
+                {"label", detection.name},
+                {"best", true}});
+            m_trackerFacade.sendCameraOverlayDetections(std::string(""), overlay_detections);
+        }
+        else
+        {
+            m_trackerFacade.sendCameraOverlayRemove(std::string(""));
+        }
+    }
 }
 
 void CYOLOAI_Main::enableTracking()
