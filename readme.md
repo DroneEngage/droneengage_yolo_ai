@@ -1,3 +1,9 @@
+> **RETIRED** — this module (`de_ai`, `de_ai_tracker.so`) is superseded by
+> `de_perceive` in `droneengage_yolo_ai_generic`: the Hailo8L path became the
+> `"hailo"` backend and the IMX500/UDP path the `"imx500_udp"` backend.
+> Kept for reference (Hailo setup notes below, `yolov8s.hef` model); do not
+> deploy new builds. Wrapper/service updates land in camera TASK-12.
+
 # Hailo8L on Raspberry Pi 5 in C++
 
 This is a minimal example of running YOLOv8 inference on a Raspberry Pi 5 with
