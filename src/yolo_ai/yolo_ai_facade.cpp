@@ -7,46 +7,30 @@
 
 using namespace de::yolo_ai;
 
+void CYOLOAI_Facade::applyOverlayTarget(Json_de& message) const
+{
+    const std::string& overlay_target =
+        de::yolo_ai::CYOLOAI_Main::getInstance().getOverlayTarget();
+    if (!overlay_target.empty())
+    {
+        message["t"] = overlay_target;
+    }
+}
+
 void CYOLOAI_Facade::sendTrackingTargetsLocation(const std::string& target_party_id, const Json_de targets_location) const
 {
-    if (targets_location.empty())
-    {
-        return;
-    }
-
-    Json_de message =
-    {
-        {"t", targets_location}
-    };
-
-    #ifdef DEBUG
-        std::cout << _INFO_CONSOLE_BOLD_TEXT << "onBestObject >> " 
-        << _LOG_CONSOLE_BOLD_TEXT << targets_location.dump() << _NORMAL_CONSOLE_TEXT_ << std::endl;
-    #endif
-
-    // internal message
-    m_module.sendJMSG(target_party_id, message, TYPE_AndruavMessage_AI_Recognition_TargetLocation, true);
+    // TYPE_AndruavMessage_AI_Recognition_TargetLocation (1078) was removed with
+    // the observation contract in de_common; nothing to send.
+    (void)target_party_id;
+    (void)targets_location;
 }
 
 void CYOLOAI_Facade::sendTrackingBestTargetsLocation(const std::string& target_party_id, const Json_de targets_location) const
 {
-    if (targets_location.empty())
-    {
-        return;
-    }
-
-    Json_de message =
-    {
-        {"b", targets_location}
-    };
-
-    #ifdef DEBUG
-        std::cout << _INFO_CONSOLE_BOLD_TEXT << "onBestObject >> " 
-        << _LOG_CONSOLE_BOLD_TEXT << targets_location.dump() << _NORMAL_CONSOLE_TEXT_ << std::endl;
-    #endif
-
-    // internal message
-    m_module.sendJMSG(target_party_id, message, TYPE_AndruavMessage_AI_Recognition_TargetLocation, true);
+    // TYPE_AndruavMessage_AI_Recognition_TargetLocation (1078) was removed with
+    // the observation contract in de_common; nothing to send.
+    (void)target_party_id;
+    (void)targets_location;
 }
             
 
@@ -159,6 +143,7 @@ void CYOLOAI_Facade::sendCameraOverlayDetections(const std::string& target_party
     if (slot > 0)
     {
         Json_de message = {{"a", CAMERA_OVERLAY_ACTION_SET_SHAPE}, {"s", shapes}};
+        applyOverlayTarget(message);
         m_module.sendJMSG(target_party_id, message, TYPE_AndruavMessage_CAMERA_OVERLAY_ACTION, true);
     }
 
@@ -172,6 +157,7 @@ void CYOLOAI_Facade::sendCameraOverlayDetections(const std::string& target_party
             ids.push_back(YOLOAI_OVERLAY_TEXT_ID_BASE + (uint32_t)i);
         }
         Json_de message = {{"a", CAMERA_OVERLAY_ACTION_REMOVE_SHAPE}, {"i", ids}};
+        applyOverlayTarget(message);
         m_module.sendJMSG(target_party_id, message, TYPE_AndruavMessage_CAMERA_OVERLAY_ACTION, true);
     }
 
@@ -201,6 +187,7 @@ void CYOLOAI_Facade::sendCameraOverlayRemove(const std::string& target_party_id)
     m_overlay_drawn_count = 0;
 
     Json_de message = {{"a", CAMERA_OVERLAY_ACTION_REMOVE_SHAPE}, {"i", ids}};
+    applyOverlayTarget(message);
     m_module.sendJMSG(target_party_id, message, TYPE_AndruavMessage_CAMERA_OVERLAY_ACTION, true);
 
 #ifdef DEBUG_OVERLAY_MSG

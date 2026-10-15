@@ -86,6 +86,13 @@ namespace yolo_ai
                 return m_class_names;
             }
 
+            // resolved at config load (CA-0027): the CAMERA_OVERLAY_ACTION
+            // target `t`; "" = legacy draw-on-all-cameras
+            inline const std::string& getOverlayTarget() const
+            {
+                return m_overlay_target;
+            }
+
         protected:
 
             void onReceive (ParsedDetection detection);
@@ -106,6 +113,7 @@ namespace yolo_ai
             std::string m_hef_model_path;
             std::string m_source_video_device;
             std::string m_output_virtual_video_path;
+            std::string m_overlay_target;
             std::vector<std::string> m_class_names;
 
             de::yolo_ai::CYOLOAI_Facade& m_trackerFacade = de::yolo_ai::CYOLOAI_Facade::getInstance();

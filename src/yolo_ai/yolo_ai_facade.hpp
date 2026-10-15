@@ -61,6 +61,10 @@ namespace yolo_ai
 
         private:
 
+            // stamps the resolved camera target `t` (CA-0027) on an outgoing
+            // CAMERA_OVERLAY_ACTION message; no-op when the target is empty
+            void applyOverlayTarget(Json_de& message) const;
+
             mutable int m_overlay_drawn_count = 0;
 
     };

@@ -6,6 +6,7 @@
 
 #include "../de_common/de_databus/configFile.hpp"
 #include "../de_common/de_databus/messages.hpp"
+#include "../de_common/helpers/overlay_target.hpp"
 
 #include "video.hpp"
 #include "yolo_ai_best_box.hpp"
@@ -146,6 +147,17 @@ bool CYOLOAI_Main::init()
               << "Using de_camera_draw:" << _INFO_CONSOLE_BOLD_TEXT
               << m_de_camera_draw << _NORMAL_CONSOLE_TEXT_
               << std::endl;
+
+    // which camera stream this module's overlays belong on (CA-0027):
+    // camera identity keys are config top-level, so the whole config object
+    // is passed; "" keeps the legacy draw-on-all-cameras behaviour
+    m_overlay_target = de::camera::resolveOverlayTarget(jsonConfig);
+    if (!m_overlay_target.empty())
+    {
+        std::cout << _LOG_CONSOLE_BOLD_TEXT
+                  << "Overlay target t:" << _INFO_CONSOLE_BOLD_TEXT
+                  << m_overlay_target << _NORMAL_CONSOLE_TEXT_ << std::endl;
+    }
 
 #ifdef UDP_AI_DETECTION
     de::yolo_ai::CUDP_AI_Receiver& m_udp_ai_receiver = de::yolo_ai::CUDP_AI_Receiver::getInstance();

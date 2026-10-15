@@ -23,6 +23,11 @@
     //"output_video_device"         : "/dev/video2",
     //"source_video_device_name"    : "DE-CAM1",
     "output_video_device_name"    : "DE-TRK",
+
+    // Camera the frames come from; sent as the overlay target "t" so de_camera
+    // draws this module's boxes only on that camera.
+    // optional, default: source_video_device_name, else source_video_device
+    //"cam_id": "DE-CAM1",
     
     // AI-MODEL
     "model_path": "yolov8s.hef",
