@@ -50,7 +50,17 @@ void CUDP_AI_Receiver::init(const int port, ONRECIEVE callback) {
         perror("Failed to create socket");
         throw std::runtime_error("Failed to create socket.");
     }
-    
+
+    // Periodic recv timeout so `run` can observe `m_exit`: shutdown() is a
+    // no-op on this unconnected UDP socket (ENOTCONN) and close() does not
+    // wake a blocked recvfrom().
+    {
+        struct timeval tv;
+        tv.tv_sec = 1;
+        tv.tv_usec = 0;
+        setsockopt(sockfd_, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv);
+    }
+
     // Set up server address structure.
     memset(&servaddr_, 0, sizeof(servaddr_));
     servaddr_.sin_family = AF_INET;
@@ -87,8 +97,10 @@ void CUDP_AI_Receiver::uninit() {
 
     m_exit = true; // Signal the thread to exit.
 
-    // Close the socket. This will cause `recvfrom` to return with an error,
-    // which will break the loop in the `run` method.
+    // Shutdown then close the socket. On this unconnected UDP socket
+    // shutdown() returns ENOTCONN without waking recvfrom(), so the
+    // SO_RCVTIMEO set in `init` is what bounds the join below.
+    shutdown(sockfd_, SHUT_RDWR);
     close(sockfd_);
     
     // Wait for the thread to finish.
@@ -125,7 +137,10 @@ void CUDP_AI_Receiver::run() {
         }
 
         if (n < 0) {
-            perror("recvfrom failed");
+            // EAGAIN/EWOULDBLOCK is the periodic SO_RCVTIMEO timeout, not an error.
+            if (errno != EAGAIN && errno != EWOULDBLOCK) {
+                perror("recvfrom failed");
+            }
             continue; // Continue the loop to check `m_exit` again.
         }
 

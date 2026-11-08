@@ -3,9 +3,11 @@
 
 // Required for networking functionalities
 #include <sys/socket.h>  
+#include <sys/time.h>    
 #include <netinet/in.h>  
 #include <unistd.h>      
 #include <arpa/inet.h>   
+#include <errno.h>      
 
 
 #include <string>    
