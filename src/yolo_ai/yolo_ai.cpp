@@ -301,6 +301,7 @@ int CYOLOAI::run() {
 
     const size_t output_yuv_frame_size = (static_cast<size_t>(original_frame_width) * original_frame_height * 3) / 2;
     
+#ifndef TEST_MODE_NO_HAILO_LINK
     // Pre-calculate the scale factors for converting normalized coordinates
     const float scale_x = static_cast<float>(original_frame_width);
     const float scale_y = static_cast<float>(original_frame_height);
@@ -313,34 +314,36 @@ int CYOLOAI::run() {
         size_t output_size = infer_model->output(output_name_str)->get_frame_size();
         pre_allocated_output_buffers.emplace_back(output_size); // Allocates a vector of `output_size` bytes
     }
+#endif // TEST_MODE_NO_HAILO_LINK
 
     m_exit_thread = false;
 
     uint64_t frame_counter = 0;
 
-
+#ifndef TEST_MODE_NO_HAILO_LINK
     std::vector<OutTensor> output_tensors;
-output_tensors.reserve(infer_model->get_output_names().size());
+    output_tensors.reserve(infer_model->get_output_names().size());
 
-for (size_t i = 0; i < infer_model->get_output_names().size(); ++i) {
-    const auto& output_name_str = infer_model->get_output_names()[i];
-    uint8_t* output_buffer_ptr = pre_allocated_output_buffers[i].data();
-    size_t output_size = pre_allocated_output_buffers[i].size();
-    auto status = bindings.output(output_name_str)->set_buffer(MemoryView(output_buffer_ptr, output_size));
-    if (status != HAILO_SUCCESS) {
-        std::cerr << _ERROR_CONSOLE_BOLD_TEXT_ << "Failed to set output buffer for " << output_name_str << ": " << status << _NORMAL_CONSOLE_TEXT_ << std::endl;
-        return status; // Critical setup error, exit function
+    for (size_t i = 0; i < infer_model->get_output_names().size(); ++i) {
+        const auto& output_name_str = infer_model->get_output_names()[i];
+        uint8_t* output_buffer_ptr = pre_allocated_output_buffers[i].data();
+        size_t output_size = pre_allocated_output_buffers[i].size();
+        auto status = bindings.output(output_name_str)->set_buffer(MemoryView(output_buffer_ptr, output_size));
+        if (status != HAILO_SUCCESS) {
+            std::cerr << _ERROR_CONSOLE_BOLD_TEXT_ << "Failed to set output buffer for " << output_name_str << ": " << status << _NORMAL_CONSOLE_TEXT_ << std::endl;
+            return status; // Critical setup error, exit function
+        }
+        const auto quant = infer_model->output(output_name_str)->get_quant_infos();
+        const auto shape = infer_model->output(output_name_str)->shape();
+        const auto format = infer_model->output(output_name_str)->format();
+        output_tensors.emplace_back(output_buffer_ptr, output_name_str, quant[0], shape, format);
     }
-    const auto quant = infer_model->output(output_name_str)->get_quant_infos();
-    const auto shape = infer_model->output(output_name_str)->shape();
-    const auto format = infer_model->output(output_name_str)->format();
-    output_tensors.emplace_back(output_buffer_ptr, output_name_str, quant[0], shape, format);
-}
 
-// Constants defined outside the loop
-const float max_distance_sq = 0.5f; // Max squared distance in normalized coordinates
-const cv::Point2f frame_center(0.5f, 0.5f); // Constant within scope
-            
+    // Constants defined outside the loop
+    const float max_distance_sq = 0.5f; // Max squared distance in normalized coordinates
+    const cv::Point2f frame_center(0.5f, 0.5f); // Constant within scope
+#endif // TEST_MODE_NO_HAILO_LINK
+
 // Main processing loop
 while (!m_exit_thread) {
     auto start_time = std::chrono::high_resolution_clock::now();
